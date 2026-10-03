@@ -1,4 +1,7 @@
-# dots
+<div align="center">
+    <img src="docs/icon.png" alt="dots logo" width="256" height="256">
+    <h1>dots</h1>
+</div>
 
 > A breif, declarative, flexible, cross-platform dotfiles manager.
 
