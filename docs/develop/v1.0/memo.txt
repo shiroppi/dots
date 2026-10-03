@@ -1,0 +1,137 @@
+V1.0
+1. Dotfilesの配置・symlink
+2. Platformごとの設定切り替え
+3. Profile管理
+4. Cross-platform対応
+5. Bootstrap
+   - 必要なディレクトリ作成
+   - Nix等の導入前処理
+6. Git repositoryからのdotfiles取得
+V1.1以降
+7. 外部ツールとの連携
+   - Secrets manager
+   - 外部ストレージ
+   - その他のfilesystem操作
+
+v0.1.0ですること（暫定）
+symlink / ファイル配置	✅ 核
+platform選択	✅ 核
+profile	✅ 核
+macOS/Linux/Windows	✅ 核
+Nixなしで動作	✅ 核
+
+v0.2.0ですること
+bootstrap	△ 最小限
+Gitからdotfiles取得	△ あってもいい
+
+```markdown
+# [Draft] dots v0.3+ 拡張機能のアーキテクチャ設計コンテキスト
+
+## 1. 全体方針：モジュラーアーキテクチャ（案C）
+* **アプローチ:** 基本は `dots.toml` 1つで完結させつつ、設定が肥大化したユーザー向けにファイルの分割・インポートをサポートする。
+* **メリット:** 初心者の導入ハードルを下げつつ、熟練者はドメインごとに設定を分割できる。
+
+**▼ 具体的な記法（dots.toml）**
+```toml
+# ワイルドカード等で外部のTOMLファイルを読み込む
+includes = [
+    "conf.d/*.toml",
+    "dots-snippets/environment.toml"
+]
+
+[dots]
+"~/.vim" = "config/vim"
+
+```
+
+## 2. 環境変数 (environment) 管理の設計方針
+
+* **基本要件:** root権限（`sudo`）を要求する `/etc/environment` は使用せず、ユーザー権限（User-level）で完結させるつもり？。sudoを使うか使わないか未定
+* **最大の課題:** TOMLからキーが「削除」された際の状態追従（ドリフト解決）。
+* **OSごとの最適解（GUIアプリへの適用も含む場合）:**
+* **Linux:** `~/.config/environment.d/*.conf` を完全上書き生成（Systemdが自動適用するため状態管理不要）（ただし環境依存）。
+* **macOS:** `launchctl setenv` ＋ LaunchAgentの自動生成（削除追従のために State 管理が必要）。
+* **Windows:** レジストリ `HKCU\Environment` への直接書き込み（削除追従のために State 管理が必要）。
+
+
+
+**▼ 具体的な記法（environment.toml または dots.toml内）**
+
+```toml
+# 全OS共通の環境変数
+[environment]
+editor = "nvim"
+lang = "ja_JP.UTF-8"
+
+# OSごとの上書き・追加
+[environment.darwin]
+apple_id = "3219083"
+
+[environment.windows]
+microsoft_id = "2131313"
+
+```
+
+## 3. Git設定 (gitconfig) 管理の設計方針
+
+.gitconfigを作らせて参照するほうがカバ＝レッジは広そうだけど、dots内で新たにキーを設定して簡潔させたい。（要議論）
+
+-------------------------めも-----------------------------------------
+* **基本要件:** OSごとの差異（credential.helper等）や用途ごとの差異を吸収する。
+* **解決策:** `dots`側でGitのINIパーサーやコマンド実行ロジックを独自実装して複雑化させるのではなく、**Gitのネイティブ機能 (`include` / `includeIf`) とSymlinkを組み合わせる**アプローチを採用。
+
+**▼ 具体的な記法（dots.toml側：Symlinkの定義）**
+
+```toml
+# 共通の.gitconfigをリンク
+[dots]
+"~/.gitconfig" = "git/.gitconfig"
+
+# OS固有のGit設定を、特定の名前（_os）でリンク
+[dots.darwin]
+"~/.gitconfig_os" = "git/mac.gitconfig"
+
+[dots.windows]
+"~/.gitconfig_os" = "git/windows.gitconfig"
+
+```
+
+**▼ 具体的な記法（git/.gitconfig側：Gitネイティブの読み込み設定）**
+
+```ini
+[user]
+    name = user
+    email = user@example.com
+
+# リンク先のOS固有ファイルが存在する場合のみ読み込まれる（エラーにならない）
+[include]
+    path = ~/.gitconfig_os
+
+```
+----------------------------------------------------------------------------
+
+```
+
+```
+
+2. あとから追加すると神ツールになるもの（v0.2.0 向け）
+
+    dots add <path>
+
+        説明: 既存のファイルを、自動でdotfilesリポジトリに移動し、dots.toml に追記し、元の場所にシンボリックリンクを張るコマンド。
+
+        例: dots add ~/.config/alacritty
+
+        理由: 新しいツールを導入したとき、手動でファイルを移動してTOMLを書いて……という作業を全自動化できます。chezmoi等で非常に人気の機能ですが、v0.1.0のスコープからは外してOKです。
+
+    dots unlink (または dots clean)
+
+        説明: dots.toml の記述に従って、作成したシンボリックリンクを安全に削除（解除）する。
+
+        理由: 「やっぱりこのツールの管理をやめたい」「dotsの使用をやめたい」という時に、手動でリンクを消して回るのは苦痛です。作成（apply）ができるなら、解除（unlink）ができるとツールとしての安心感が跳ね上がります。
+
+    dots cd
+
+        説明: dotfilesリポジトリのディレクトリに移動する（またはパスを出力する）。
+
+        理由: cd $(dots cd) のように使うことで、どこにいても一瞬でdotfilesディレクトリに飛べるようになります。
