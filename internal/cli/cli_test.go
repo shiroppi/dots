@@ -594,3 +594,143 @@ ignore = ["**/*.txt"]
 		t.Errorf("second apply should be ok, got %q", te.out.String())
 	}
 }
+
+const expectedRootHelp = `
+A brief, declarative, flexible dotfiles manager.
+
+Usage:
+  dots <command> [options]
+
+Core:
+  apply       Apply dotfiles
+  doctor      Check configuration and managed files
+
+Usability:
+  init        Initialize a dotfiles repository
+  restore     Restore files from backups
+  edit        Edit dots.toml with $EDITOR
+
+Options:
+  -h, --help      Show help
+  -v, --version   Show version
+
+Use "dots <command> --help" for more information.
+`
+
+func TestHelp(t *testing.T) {
+	te := setupEnv(t)
+
+	for _, arg := range []string{"--help", "-h", "help", ""} {
+		name := arg
+		if name == "" {
+			name = "empty"
+		}
+		t.Run(name, func(t *testing.T) {
+			var args []string
+			if arg != "" {
+				args = []string{arg}
+			}
+			if code := te.run(args...); code != 0 {
+				t.Errorf("want 0, got %d", code)
+			}
+			if te.errOut.Len() != 0 {
+				t.Errorf("stderr not empty: %q", te.errOut.String())
+			}
+			if out := te.out.String(); out != expectedRootHelp {
+				t.Errorf("stdout mismatch:\nwant:\n%q\ngot:\n%q", expectedRootHelp, out)
+			}
+		})
+	}
+
+	te.run("--help")
+	out := te.out.String()
+	for _, word := range []string{"completion", "status", "Plugin"} {
+		if strings.Contains(out, word) {
+			t.Errorf("root help should not contain %q", word)
+		}
+	}
+	idx1 := strings.Index(out, "apply")
+	idx2 := strings.Index(out, "doctor")
+	idx3 := strings.Index(out, "init")
+	idx4 := strings.Index(out, "restore")
+	idx5 := strings.Index(out, "edit")
+	if !(idx1 < idx2 && idx2 < idx3 && idx3 < idx4 && idx4 < idx5) {
+		t.Errorf("wrong command order in root help")
+	}
+
+	for _, arg := range []string{"-v", "--version"} {
+		t.Run(arg, func(t *testing.T) {
+			if code := te.run(arg); code != 0 {
+				t.Errorf("want 0, got %d", code)
+			}
+			if out := te.out.String(); out != "dots version test\n" {
+				t.Errorf("want 'dots version test\\n', got %q", out)
+			}
+		})
+	}
+
+	applyHelp := "Apply dotfiles\n\nUsage:\n  dots apply [options]\n\nOptions:\n      --dry-run   Show what would be done without changing anything\n  -h, --help      Show help\n"
+	te.run("apply", "--help")
+	if out := te.out.String(); out != applyHelp {
+		t.Errorf("apply help mismatch:\nwant:\n%q\ngot:\n%q", applyHelp, out)
+	}
+
+	restoreHelp := "Restore files from backups\n\nUsage:\n  dots restore <archive> [options]\n\nOptions:\n      --dry-run   Show what would be restored without changing anything\n  -h, --help      Show help\n"
+	te.run("restore", "--help")
+	if out := te.out.String(); out != restoreHelp {
+		t.Errorf("restore help mismatch:\nwant:\n%q\ngot:\n%q", restoreHelp, out)
+	}
+
+	te.run("help", "apply")
+	if out := te.out.String(); out != applyHelp {
+		t.Errorf("help apply mismatch:\nwant:\n%q\ngot:\n%q", applyHelp, out)
+	}
+}
+
+func TestUsageErrors(t *testing.T) {
+	te := setupEnv(t)
+
+	for _, args := range [][]string{
+		{"nosuch"},
+		{"apply", "--bad"},
+		{"apply", "extra"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			if code := te.run(args...); code != 1 {
+				t.Errorf("want 1, got %d", code)
+			}
+			errStr := te.errOut.String()
+			if !strings.HasSuffix(errStr, "Run \"dots --help\" for usage.\n") {
+				t.Errorf("missing help hint: %q", errStr)
+			}
+			if strings.Contains(errStr, "Usage:") {
+				t.Errorf("stderr contains 'Usage:': %q", errStr)
+			}
+		})
+	}
+
+	te.app.Env.Cwd = p("empty")
+	te.fsys.MkdirAll(p("empty"), 0o755)
+	if code := te.run("doctor"); code != 1 {
+		t.Errorf("want 1, got %d", code)
+	}
+	errStr := te.errOut.String()
+	if strings.Contains(errStr, "Run \"dots --help\" for usage.") {
+		t.Errorf("unexpected help hint: %q", errStr)
+	}
+	if errStr == "" {
+		t.Errorf("expected error message")
+	}
+
+	te.app.Env.Cwd = root()
+	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n\"~/.x\" = \"x\"\n"), 0o644)
+	dotsfs.WriteFile(te.fsys, p("x"), []byte("x"), 0o644)
+	te.out.Reset()
+	te.errOut.Reset()
+	if code := te.run("doctor"); code != 1 {
+		t.Errorf("want 1, got %d", code)
+	}
+	if te.errOut.Len() != 0 {
+		t.Errorf("expected no stderr for silent error, got %q", te.errOut.String())
+	}
+}
