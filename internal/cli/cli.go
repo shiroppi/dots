@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
 	"github.com/shiroppi/dots/internal/apply"
@@ -53,6 +54,13 @@ type silentError struct{}
 
 func (silentError) Error() string { return "exit status 1" }
 
+// usageError marks a command-line usage mistake (unknown command, bad flag,
+// wrong arguments); ExitCode appends a pointer to --help for it.
+type usageError struct{ err error }
+
+func (u usageError) Error() string { return u.err.Error() }
+func (u usageError) Unwrap() error { return u.err }
+
 // ExitCode maps the error returned by a command to a process exit code and
 // prints it to stderr as `dots: <message>` (one line per joined error). A nil
 // error yields 0; a silent error (output already printed) yields 1 without
@@ -65,8 +73,16 @@ func ExitCode(err error, stderr io.Writer) int {
 	if errors.As(err, &s) {
 		return 1
 	}
+	hint := false
 	for _, e := range ui.Flatten(err) {
 		fmt.Fprintf(stderr, "dots: %s\n", strings.ReplaceAll(strings.TrimRight(e.Error(), "\n"), "\n", " "))
+		var u usageError
+		if errors.As(e, &u) {
+			hint = true
+		}
+	}
+	if hint {
+		fmt.Fprintln(stderr, `Run "dots --help" for usage.`)
 	}
 	return 1
 }
@@ -101,14 +117,62 @@ func (a *App) load() (*model.Resolution, error) {
 	return resolve.Resolve(a.FS, a.Env, path, cfg)
 }
 
+const rootHelp = `
+A brief, declarative, flexible dotfiles manager.
+
+Usage:
+  dots <command> [options]
+
+Core:
+  apply       Apply dotfiles
+  doctor      Check configuration and managed files
+
+Usability:
+  init        Initialize a dotfiles repository
+  restore     Restore files from backups
+  edit        Edit dots.toml with $EDITOR
+
+Options:
+  -h, --help      Show help
+  -v, --version   Show version
+
+Use "dots <command> --help" for more information.
+`
+
+// helpFunc prints the fixed root help, or the plain-text help of a subcommand.
+func helpFunc(root *cobra.Command) func(*cobra.Command, []string) {
+	return func(cmd *cobra.Command, _ []string) {
+		w := cmd.OutOrStdout()
+		if cmd == root {
+			fmt.Fprint(w, rootHelp)
+			return
+		}
+		fmt.Fprintf(w, "%s\n\nUsage:\n  dots %s [options]\n\nOptions:\n", cmd.Short, cmd.Use)
+		cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
+			if f.Name == "help" {
+				return
+			}
+			fmt.Fprintf(w, "  %-16s%s\n", "    --"+f.Name, f.Usage)
+		})
+		fmt.Fprintf(w, "  %-16s%s\n", "-h, --help", "Show help")
+	}
+}
+
 // NewRootCmd builds the command tree.
 func NewRootCmd(app *App, version string) *cobra.Command {
 	root := &cobra.Command{
 		Use:           "dots",
-		Short:         "Declarative cross-platform dotfiles manager",
+		Short:         "A brief, declarative, flexible dotfiles manager.",
 		Version:       version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 {
+				return usageError{fmt.Errorf("unknown command %q for %q", args[0], cmd.CommandPath())}
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 	}
 	root.SetVersionTemplate("dots version {{.Version}}\n")
 	root.SetOut(app.Stdout)
@@ -116,8 +180,21 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 	if app.Stdin != nil {
 		root.SetIn(app.Stdin)
 	}
+	cobra.EnableCommandSorting = false
 	root.CompletionOptions.DisableDefaultCmd = true
+	root.SetHelpFunc(helpFunc(root))
+	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
 	root.AddCommand(newInitCmd(app), newDoctorCmd(app), newApplyCmd(app), newRestoreCmd(app), newEditCmd(app))
+	for _, c := range root.Commands() {
+		if inner := c.Args; inner != nil {
+			c.Args = func(cmd *cobra.Command, args []string) error {
+				if err := inner(cmd, args); err != nil {
+					return usageError{err}
+				}
+				return nil
+			}
+		}
+	}
 	return root
 }
 
@@ -156,7 +233,7 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 func newInitCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "init",
-		Short: "Create dots.toml in the current directory",
+		Short: "Initialize a dotfiles repository",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := filepath.Join(app.Env.Cwd, config.FileName)
@@ -184,7 +261,7 @@ func newInitCmd(app *App) *cobra.Command {
 func newDoctorCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Report whether every link is in place (never changes anything)",
+		Short: "Check configuration and managed files",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := app.load()
@@ -204,7 +281,7 @@ func newApplyCmd(app *App) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "apply",
-		Short: "Create the links described by dots.toml",
+		Short: "Apply dotfiles",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := app.load()
@@ -253,7 +330,7 @@ func newApplyCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be done without changing anything")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without changing anything")
 	return cmd
 }
 
@@ -261,7 +338,7 @@ func newRestoreCmd(app *App) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
 		Use:   "restore <archive>",
-		Short: "Restore a backup archive to its original location",
+		Short: "Restore files from backups",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := config.Find(app.FS, app.Env.Cwd); err != nil {
@@ -310,14 +387,14 @@ func newRestoreCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "show what would be restored without changing anything")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be restored without changing anything")
 	return cmd
 }
 
 func newEditCmd(app *App) *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit",
-		Short: "Open dots.toml in $EDITOR",
+		Short: "Edit dots.toml with $EDITOR",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path, err := config.Find(app.FS, app.Env.Cwd)
