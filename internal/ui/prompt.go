@@ -149,7 +149,8 @@ func runForm(form *huh.Form) error {
 		case <-ctx.Done():
 		}
 	}()
-	return formResult(form.State, form.RunWithContext(ctx))
+	err := form.RunWithContext(ctx) // must run before form.State is read
+	return formResult(form.State, err)
 }
 
 // formResult decides the outcome of a finished form. huh returns nil from
