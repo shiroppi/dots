@@ -257,6 +257,7 @@ ignore = ["README.md", "**/.DS_Store", "skipme"]
 	must(t, err)
 	eq(t, summary(res), []string{
 		`home/.cfg/emptydir<-s/emptydir[auto[0]]`,
+		`home/.cfg/onlyignored<-s/onlyignored[auto[0]]`,     // emptied by ignore: real directory
 		`home/.cfg/top/README.md<-s/top/README.md[auto[0]]`, // root-only pattern does not match nested
 		`home/.cfg/top/keep<-s/top/keep[auto[0]]`,
 	})
@@ -271,10 +272,12 @@ ignore = ["**/README.md", "**/.DS_Store", "skipme"]
 	must(t, err)
 	eq(t, summary(res), []string{
 		`home/.cfg/emptydir<-s/emptydir[auto[0]]`,
+		`home/.cfg/onlyignored<-s/onlyignored[auto[0]]`, // emptied by ignore: real directory
 		`home/.cfg/top/keep<-s/top/keep[auto[0]]`,
 	})
 
-	// Physically empty source root and fully-ignored root produce nothing.
+	// A physically empty source root produces nothing; a fully-ignored one
+	// produces a single real-directory entry at the target root.
 	res, err = run(t, m, "linux", "[[auto]]\nsource = \"r\"\ntarget = \"~/.cfg\"\n")
 	must(t, err)
 	if len(res.Entries) != 0 {
@@ -282,7 +285,7 @@ ignore = ["**/README.md", "**/.DS_Store", "skipme"]
 	}
 	res, err = run(t, m, "linux", "[[auto]]\nsource = \"s/onlyignored\"\ntarget = \"~/.cfg\"\nignore = [\".DS_Store\"]\n")
 	must(t, err)
-	if len(res.Entries) != 0 {
+	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindDir || res.Entries[0].Target != h(".cfg") {
 		t.Errorf("ignored root: %v", summary(res))
 	}
 }
@@ -487,5 +490,48 @@ target = "~/.cfg"
 			continue
 		}
 		eq(t, got, first)
+	}
+}
+
+func TestDirEntries(t *testing.T) {
+	m := build(t, tree{files: []string{"s/a/b/x", "s/only", "t/x", "u/x"}})
+	res, err := run(t, m, "linux", `
+[[auto]]
+source = "s"
+target = "~/.cfg"
+ignore = ["**/x", "only"]
+
+[[auto]]
+source = "t"
+target = "~/.t"
+ignore = ["x"]
+`)
+	must(t, err)
+	if len(res.Entries) != 2 || res.Entries[0].Kind != model.KindDir || res.Entries[1].Kind != model.KindDir {
+		t.Fatalf("got %v", summary(res))
+	}
+	// Deepest emptied dir for s; the target root itself for t.
+	if res.Entries[0].Target != h(".cfg", "a", "b") || res.Entries[1].Target != h(".t") {
+		t.Fatalf("got %v", summary(res))
+	}
+
+	// Same-priority dir entries agree (first rule wins); a link below is fine.
+	res, err = run(t, m, "linux", `
+[[auto]]
+source = "t"
+target = "~/.t"
+ignore = ["x"]
+
+[[auto]]
+source = "t"
+target = "~/.t"
+ignore = ["x"]
+
+[dots]
+"~/.t/y" = "u/x"
+`)
+	must(t, err)
+	if len(res.Entries) != 2 || res.Entries[0].Origin.Rule != "auto[0]" || res.Entries[0].Kind != model.KindDir {
+		t.Fatalf("got %v", summary(res))
 	}
 }

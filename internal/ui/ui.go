@@ -122,6 +122,10 @@ func (p *Printer) itemErrors(err error) {
 }
 
 func (p *Printer) entryLine(badge string, e model.Entry) {
+	if e.Kind == model.KindDir {
+		p.printf("%s %s (directory)  %s\n", badge, p.display(e.Target), p.paint(toneDim, "("+e.Origin.String()+")"))
+		return
+	}
 	p.printf("%s %s -> %s  %s\n", badge, p.display(e.Target), p.display(e.Source), p.paint(toneDim, "("+e.Origin.String()+")"))
 }
 
@@ -133,7 +137,11 @@ func (p *Printer) overrides(ovs []model.Override) {
 	for _, o := range ovs {
 		p.printf("  %s\n", p.display(o.Target))
 		p.printf("    winner: %s\n", o.Winner.String())
-		p.printf("    loser:  %s -> %s\n", o.Loser.Origin.String(), p.display(o.Loser.Source))
+		if o.Loser.Kind == model.KindDir {
+			p.printf("    loser:  %s (directory)\n", o.Loser.Origin.String())
+		} else {
+			p.printf("    loser:  %s -> %s\n", o.Loser.Origin.String(), p.display(o.Loser.Source))
+		}
 	}
 }
 
@@ -142,7 +150,7 @@ func doctorBadge(r state.Result) (tone, string) {
 		return toneRed, "ERROR"
 	}
 	switch r.Status {
-	case state.ValidLink:
+	case state.ValidLink, state.ValidDir:
 		return toneGreen, "OK"
 	case state.NotExist:
 		return toneYellow, "MISSING"
@@ -214,7 +222,11 @@ func (p *Printer) Plan(plan *apply.Plan) {
 		p.entryLine(p.badge(t, label), r.Entry)
 		switch it.Action {
 		case apply.ActionSkip:
-			p.printf("             already linked\n")
+			if r.Entry.Kind == model.KindDir {
+				p.printf("             already a directory\n")
+			} else {
+				p.printf("             already linked\n")
+			}
 		case apply.ActionReplace:
 			p.printf("             %s (backed up first)\n", describeExisting(r))
 		case apply.ActionError:

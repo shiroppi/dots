@@ -307,3 +307,14 @@ func TestReportWarning(t *testing.T) {
 	out := render(func(pr *Printer) { pr.Report(rep) })
 	checkContains(t, out, "[replaced]", "warning: leftover not removed", "0 failed, 0 not processed, 1 warning(s)")
 }
+
+func TestDirEntryRendering(t *testing.T) {
+	var buf bytes.Buffer
+	pr := &Printer{W: &buf}
+	pr.entryLine("[x]", model.Entry{Target: "/t/d", Source: "/s/d", Kind: model.KindDir, Origin: model.Origin{Rule: "auto[0]"}})
+	pr.overrides([]model.Override{{Target: "/t/d", Loser: model.Entry{Kind: model.KindDir, Origin: model.Origin{Rule: "auto[1]"}}}})
+	out := buf.String()
+	if !strings.Contains(out, "(directory)  (auto[0])") || strings.Contains(out, "->") || !strings.Contains(out, "auto[1] (directory)") {
+		t.Fatalf("got %q", out)
+	}
+}

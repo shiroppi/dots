@@ -42,14 +42,41 @@ type Origin struct {
 
 func (o Origin) String() string { return o.Rule }
 
-// Entry is one concrete symlink that dots manages after resolution.
+// Kind is what dots manages at Entry.Target.
+type Kind int
+
+const (
+	// KindLink (zero value): a relative symlink to Source.
+	KindLink Kind = iota
+	// KindDir: a real directory (auto: a source directory whose every child
+	// was ignored).
+	KindDir
+)
+
+// String returns "link" or "dir".
+func (k Kind) String() string {
+	switch k {
+	case KindLink:
+		return "link"
+	case KindDir:
+		return "dir"
+	default:
+		return fmt.Sprintf("Kind(%d)", int(k))
+	}
+}
+
+// Entry is one concrete item (symlink or real directory) that dots manages
+// after resolution.
 type Entry struct {
-	// Target is the absolute, cleaned runtime path where the symlink lives.
+	// Target is the absolute, cleaned runtime path where the item lives.
 	Target string
 	// Source is the absolute, cleaned runtime path of the item the symlink
 	// must point to (a regular file, a directory, or a symlink item inside
-	// the repository; source symlinks are never followed).
+	// the repository; source symlinks are never followed). For KindDir it is
+	// the source directory, for display only; nothing links to it.
 	Source string
+	// Kind is what is managed at Target.
+	Kind   Kind
 	Origin Origin
 }
 

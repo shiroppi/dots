@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/shiroppi/dots/internal/fs"
+	"github.com/shiroppi/dots/internal/model"
 )
 
 // Decision is the answer to a conflict prompt (spec §6).
@@ -260,9 +261,16 @@ func Execute(fsys fs.Manager, plan *Plan, opts Options) (*Report, error) {
 	return rep, nil
 }
 
-// place creates the parent directories and the relative symlink.
+// place creates the real directory (KindDir) or the parent directories and
+// the relative symlink (KindLink).
 func place(fsys fs.Manager, it Item) error {
 	target := it.Target()
+	if it.Result.Entry.Kind == model.KindDir {
+		if err := fsys.MkdirAll(target, 0o755); err != nil {
+			return fmt.Errorf("cannot create directory %s: %w", target, err)
+		}
+		return nil
+	}
 	if err := fsys.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return fmt.Errorf("cannot create parent directory of %s: %w", target, err)
 	}

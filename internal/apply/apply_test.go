@@ -472,3 +472,24 @@ func TestExecuteReplaceWarningIsNotFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestExecuteDirEntry(t *testing.T) {
+	m := newFS(t)
+	e := ent("a")
+	e.Kind = model.KindDir
+	e.Target = p("home", ".cfg", "sub")
+	res := &model.Resolution{Root: root(), Entries: []model.Entry{e}}
+
+	plan := BuildPlan(m, res)
+	if plan.Items[0].Action != ActionCreate {
+		t.Fatalf("action %v", plan.Items[0].Action)
+	}
+	rep, err := Execute(m, plan, Options{})
+	mustNil(t, err)
+	if rep.Created() != 1 || kind(t, m, e.Target) != "dir" {
+		t.Fatalf("created=%d kind=%s", rep.Created(), kind(t, m, e.Target))
+	}
+	if plan = BuildPlan(m, res); plan.Items[0].Action != ActionSkip {
+		t.Fatalf("action %v", plan.Items[0].Action)
+	}
+}

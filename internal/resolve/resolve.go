@@ -93,6 +93,17 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 				best = append(best, c)
 			}
 		}
+		allDirs := true
+		for _, b := range best {
+			if b.Kind != model.KindDir {
+				allDirs = false
+			}
+		}
+		if allDirs && len(best) > 1 {
+			// Several rules agree on a real directory: not a duplicate.
+			sort.SliceStable(best, func(i, j int) bool { return best[i].Origin.Rule < best[j].Origin.Rule })
+			best = best[:1]
+		}
 		if len(best) > 1 {
 			rules := make([]string, len(best))
 			for i, b := range best {
@@ -125,7 +136,7 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 				break
 			}
 			cur = parent
-			if pw, ok := byKey[pathx.Key(env.GOOS, cur)]; ok {
+			if pw, ok := byKey[pathx.Key(env.GOOS, cur)]; ok && pw.Kind != model.KindDir {
 				errs = append(errs, fmt.Errorf("target %s (%s) is inside target %s (%s); a target cannot be placed below another managed target",
 					filepath.Clean(w.Target), w.Origin.Rule, filepath.Clean(pw.Target), pw.Origin.Rule))
 			}
@@ -182,7 +193,12 @@ func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.La
 		return nil, []error{fmt.Errorf("%s: auto source %s must be a directory (not a file or symlink)", rule, sourceRoot)}
 	}
 	w := &walker{fsys: fsys, rule: rule, layer: layer, sourceRoot: sourceRoot, targetRoot: targetRoot, ign: r.Ignore}
-	w.walk("")
+	if n := w.walk(""); n == 0 && len(w.errs) == 0 {
+		// Not physically empty (checked below) but everything was ignored.
+		if ents, err := fsys.ReadDir(sourceRoot); err == nil && len(ents) > 0 {
+			w.emitDir("")
+		}
+	}
 	return w.out, w.errs
 }
 
@@ -205,16 +221,27 @@ func (w *walker) emit(rel string) {
 	})
 }
 
+func (w *walker) emitDir(rel string) {
+	w.out = append(w.out, model.Entry{
+		Target: filepath.Join(w.targetRoot, filepath.FromSlash(rel)),
+		Source: filepath.Join(w.sourceRoot, filepath.FromSlash(rel)),
+		Kind:   model.KindDir,
+		Origin: model.Origin{Layer: w.layer, Rule: w.rule},
+	})
+}
+
 func (w *walker) fail(format string, a ...interface{}) {
 	w.errs = append(w.errs, fmt.Errorf("%s: %s", w.rule, fmt.Sprintf(format, a...)))
 }
 
-func (w *walker) walk(relDir string) {
+// walk emits the entries below relDir and returns how many it emitted.
+func (w *walker) walk(relDir string) int {
+	count := 0
 	dir := filepath.Join(w.sourceRoot, filepath.FromSlash(relDir))
 	entries, err := w.fsys.ReadDir(dir)
 	if err != nil {
 		w.fail("cannot read directory %s: %v", dir, err)
-		return
+		return 0
 	}
 	for _, e := range entries {
 		rel := path.Join(relDir, e.Name())
@@ -237,9 +264,12 @@ func (w *walker) walk(relDir string) {
 				continue
 			}
 			w.emit(rel)
+			count++
 		case mode.IsRegular():
 			w.emit(rel)
+			count++
 		case mode.IsDir():
+			errsBefore := len(w.errs)
 			sub, err := w.fsys.ReadDir(full)
 			if err != nil {
 				w.fail("cannot read directory %s: %v", full, err)
@@ -247,11 +277,17 @@ func (w *walker) walk(relDir string) {
 			}
 			if len(sub) == 0 {
 				w.emit(rel)
-			} else {
-				w.walk(rel)
+				count++
+			} else if n := w.walk(rel); n > 0 {
+				count += n
+			} else if len(w.errs) == errsBefore {
+				// Everything below was ignored: manage a real directory.
+				w.emitDir(rel)
+				count++
 			}
 		default:
 			w.fail("unsupported file type (%s) in auto source: %s", mode.Type(), full)
 		}
 	}
+	return count
 }
