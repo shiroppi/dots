@@ -31,4 +31,7 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# claude code
 CLAUDE.md
+.claude
