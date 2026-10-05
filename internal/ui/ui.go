@@ -32,10 +32,12 @@ const (
 	toneGreen
 	toneYellow
 	toneRed
+	toneBlue
+	toneMagenta
 	toneDim
 )
 
-var toneCode = map[tone]string{toneGreen: "32", toneYellow: "33", toneRed: "31", toneDim: "2"}
+var toneCode = map[tone]string{toneGreen: "32", toneYellow: "33", toneRed: "31", toneBlue: "34", toneMagenta: "35", toneDim: "2"}
 
 // paint wraps s in an SGR sequence only when color is enabled.
 func (p *Printer) paint(t tone, s string) string {
@@ -43,10 +45,6 @@ func (p *Printer) paint(t tone, s string) string {
 		return s
 	}
 	return "\x1b[" + toneCode[t] + "m" + s + "\x1b[0m"
-}
-
-func (p *Printer) badge(t tone, label string) string {
-	return p.paint(t, fmt.Sprintf("%-12s", "["+label+"]"))
 }
 
 func (p *Printer) printf(format string, a ...interface{}) {
@@ -163,18 +161,61 @@ func (p *Printer) Errors(errs []error) {
 	}
 }
 
-func (p *Printer) itemErrors(err error) {
-	for _, e := range Flatten(err) {
-		p.printf("             %s %s\n", p.paint(toneRed, "!"), oneLine(e.Error()))
+// itemIndent and detailIndent are the left margins of item and detail lines.
+const (
+	itemIndent   = "  "
+	detailIndent = "    "
+)
+
+// Status symbols (spec §8): the same set describes states (doctor) and
+// operations (dry-run, apply).
+const (
+	symOK      = "✓"
+	symCreate  = "+"
+	symReplace = "~"
+	symProblem = "!"
+	symMissing = "×"
+)
+
+// targetLabel is the displayed target; a real directory (KindDir) gets a
+// trailing separator.
+func (p *Printer) targetLabel(e model.Entry) string {
+	s := p.display(e.Target)
+	if e.Kind == model.KindDir {
+		s += string(filepath.Separator)
 	}
+	return s
 }
 
-func (p *Printer) entryLine(badge string, e model.Entry) {
-	if e.Kind == model.KindDir {
-		p.printf("%s %s (directory)  %s\n", badge, p.display(e.Target), p.paint(toneDim, "("+e.Origin.String()+")"))
-		return
+// itemLine prints "  <symbol> [word ]<target><suffix>". The symbol and the
+// word share one color.
+func (p *Printer) itemLine(t tone, sym, word string, e model.Entry, suffix string) {
+	mark := sym
+	if word != "" {
+		mark += " " + word
 	}
-	p.printf("%s %s -> %s  %s\n", badge, p.display(e.Target), p.displaySource(e.Source), p.paint(toneDim, "("+e.Origin.String()+")"))
+	p.printf("%s%s %s%s\n", itemIndent, p.paint(t, mark), p.targetLabel(e), suffix)
+}
+
+// mapping is the doctor-only "-> source  origin" tail of an item line.
+func (p *Printer) mapping(e model.Entry) string {
+	s := ""
+	if e.Kind != model.KindDir {
+		s = " -> " + p.displaySource(e.Source)
+	}
+	return s + "  " + p.paint(toneDim, e.Origin.String())
+}
+
+// detail prints one line indented under its item.
+func (p *Printer) detail(t tone, text string) {
+	p.printf("%s%s\n", detailIndent, p.paint(t, text))
+}
+
+// errorDetails prints every leaf of err as a detail line.
+func (p *Printer) errorDetails(err error) {
+	for _, e := range Flatten(err) {
+		p.detail(toneRed, oneLine(p.DisplayText(e.Error())))
+	}
 }
 
 func (p *Printer) overrides(ovs []model.Override) {
@@ -183,62 +224,96 @@ func (p *Printer) overrides(ovs []model.Override) {
 	}
 	p.printf("\nOverridden rules:\n")
 	for _, o := range ovs {
-		p.printf("  %s\n", p.display(o.Target))
-		p.printf("    winner: %s\n", o.Winner.String())
+		p.printf("%s%s\n", itemIndent, p.display(o.Target))
+		p.detail(toneDim, "kept:    "+o.Winner.String())
 		if o.Loser.Kind == model.KindDir {
-			p.printf("    loser:  %s (directory)\n", o.Loser.Origin.String())
+			p.detail(toneDim, "ignored: "+o.Loser.Origin.String()+" (directory)")
 		} else {
-			p.printf("    loser:  %s -> %s\n", o.Loser.Origin.String(), p.displaySource(o.Loser.Source))
+			p.detail(toneDim, "ignored: "+o.Loser.Origin.String()+" -> "+p.displaySource(o.Loser.Source))
 		}
 	}
 }
 
-func doctorBadge(r state.Result) (tone, string) {
+// count is one "N noun" part of a summary line.
+type count struct {
+	n    int
+	noun string
+}
+
+// summary joins the non-zero counts: "2 to create, 3 already ok".
+func summary(parts ...count) string {
+	var out []string
+	for _, c := range parts {
+		if c.n > 0 {
+			out = append(out, fmt.Sprintf("%d %s", c.n, c.noun))
+		}
+	}
+	return strings.Join(out, ", ")
+}
+
+const upToDate = "Everything is up to date."
+
+// doctorMark maps a doctor result to its symbol line parts. word is empty for
+// the states that need none.
+func doctorMark(r state.Result) (t tone, sym, word string) {
 	if r.Err != nil {
-		return toneRed, "ERROR"
+		return toneYellow, symProblem, "error"
 	}
 	switch r.Status {
 	case state.ValidLink, state.ValidDir:
-		return toneGreen, "OK"
+		return toneGreen, symOK, ""
 	case state.NotExist:
-		return toneYellow, "MISSING"
+		return toneRed, symMissing, ""
 	case state.InvalidLink:
-		return toneYellow, "WRONG LINK"
+		return toneYellow, symProblem, "wrong link"
 	case state.FileOrDir:
-		return toneYellow, "CONFLICT"
+		return toneYellow, symProblem, "conflict"
 	default:
-		return toneRed, "ERROR"
+		return toneYellow, symProblem, "error"
 	}
 }
 
 // Doctor prints the doctor report (spec §8). ok is false when any item is not
-// a valid link or has an error.
+// a valid link or has an error. doctor is the diagnostic view, so unlike
+// apply it keeps the mapping (-> source) and the origin of every rule.
 func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
 	p.header()
 	ok = true
-	counts := map[string]int{}
+	var nOK, nMissing, nWrong, nConflict, nErr int
 	for _, it := range plan.Items {
 		r := it.Result
-		t, label := doctorBadge(r)
-		counts[label]++
-		if label != "OK" {
+		t, sym, word := doctorMark(r)
+		switch {
+		case sym == symOK:
+			nOK++
+		case sym == symMissing:
+			nMissing++
+		case word == "wrong link":
+			nWrong++
+		case word == "conflict":
+			nConflict++
+		default:
+			nErr++
+		}
+		if sym != symOK {
 			ok = false
 		}
-		p.entryLine(p.badge(t, label), r.Entry)
+		p.itemLine(t, sym, word, r.Entry, p.mapping(r.Entry))
 		if r.Err == nil && r.Status == state.InvalidLink {
-			p.printf("             current link: %s\n", oneLine(r.Current))
+			p.detail(toneDim, "current link: "+oneLine(r.Current))
 		}
 		if r.Err != nil {
-			p.itemErrors(r.Err)
+			p.errorDetails(r.Err)
 		}
 	}
 	p.overrides(plan.Overrides)
-	p.printf("\n%d link(s): %d ok, %d missing, %d wrong link, %d conflict, %d error",
-		len(plan.Items), counts["OK"], counts["MISSING"], counts["WRONG LINK"], counts["CONFLICT"], counts["ERROR"])
-	if n := len(plan.Overrides); n > 0 {
-		p.printf(", %d overridden rule(s)", n)
-	}
 	p.printf("\n")
+	if len(plan.Items) == 0 {
+		p.printf("No links are defined.\n")
+	} else {
+		p.printf("%s\n", summary(count{nOK, "ok"}, count{nMissing, "missing"}, count{nWrong, "wrong link"},
+			count{nConflict, "conflict"}, count{nErr, "error"}, count{len(plan.Overrides), "overridden rule(s)"}))
+	}
 	if ok {
 		p.printf("%s\n", p.paint(toneGreen, "Everything is in order."))
 	} else {
@@ -253,42 +328,55 @@ func (p *Printer) Plan(plan *apply.Plan) {
 	var nCreate, nSkip, nReplace, nErr int
 	for _, it := range plan.Items {
 		r := it.Result
-		var t tone
-		var label string
 		switch it.Action {
 		case apply.ActionCreate:
-			t, label = toneGreen, "create"
 			nCreate++
+			p.itemLine(toneBlue, symCreate, "", r.Entry, "")
 		case apply.ActionSkip:
-			t, label = toneDim, "skip"
 			nSkip++
+			p.itemLine(toneGreen, symOK, "", r.Entry, "")
 		case apply.ActionReplace:
-			t, label = toneYellow, "replace"
 			nReplace++
+			p.itemLine(toneMagenta, symReplace, "", r.Entry, "")
+			p.detail(toneDim, describeExisting(r)+"; will be backed up and replaced after confirmation")
 		default:
-			t, label = toneRed, "error"
 			nErr++
-		}
-		p.entryLine(p.badge(t, label), r.Entry)
-		switch it.Action {
-		case apply.ActionSkip:
-			if r.Entry.Kind == model.KindDir {
-				p.printf("             already a directory\n")
-			} else {
-				p.printf("             already linked\n")
-			}
-		case apply.ActionReplace:
-			p.printf("             %s (backed up first)\n", describeExisting(r))
-		case apply.ActionError:
-			p.itemErrors(r.Err)
+			p.itemLine(toneYellow, symProblem, "error", r.Entry, "")
+			p.errorDetails(r.Err)
 		}
 	}
 	p.overrides(plan.Overrides)
-	p.printf("\n%d link(s): %d to create, %d already linked, %d to replace, %d error\n",
-		len(plan.Items), nCreate, nSkip, nReplace, nErr)
-	if nReplace > 0 {
-		p.printf("%d conflict(s) will ask for confirmation\n", nReplace)
+	p.printf("\n")
+	if nCreate+nReplace+nErr == 0 {
+		p.printf("%s\n", upToDate)
+		return
 	}
+	p.printf("%s\n", summary(count{nCreate, "to create"}, count{nReplace, "to replace"},
+		count{nSkip, "already ok"}, count{nErr, "error(s)"}))
+}
+
+// Blocked prints the plan of an apply that was rejected before any change
+// (validation errors, or conflicts without a terminal): conflicts and errors
+// are marked, and everything that would have been created is not processed.
+func (p *Printer) Blocked(plan *apply.Plan) {
+	p.header()
+	for _, it := range plan.Items {
+		r := it.Result
+		switch it.Action {
+		case apply.ActionSkip:
+			p.itemLine(toneGreen, symOK, "", r.Entry, "")
+		case apply.ActionCreate:
+			p.itemLine(toneYellow, symProblem, "not processed", r.Entry, "")
+		case apply.ActionReplace:
+			p.itemLine(toneYellow, symProblem, "conflict", r.Entry, "")
+			p.detail(toneDim, describeExisting(r))
+		default:
+			p.itemLine(toneYellow, symProblem, "error", r.Entry, "")
+			p.errorDetails(r.Err)
+		}
+	}
+	p.overrides(plan.Overrides)
+	p.printf("\n")
 }
 
 // Report prints the outcome of apply.
@@ -296,40 +384,40 @@ func (p *Printer) Report(rep *apply.Report) {
 	p.header()
 	warnings := 0
 	for _, ir := range rep.Items {
-		var t tone
-		var label string
+		e := ir.Item.Result.Entry
 		switch ir.Outcome {
 		case apply.Created:
-			t, label = toneGreen, "created"
+			p.itemLine(toneBlue, symCreate, "", e, "")
 		case apply.AlreadyOK:
-			t, label = toneDim, "ok"
+			p.itemLine(toneGreen, symOK, "", e, "")
 		case apply.Replaced:
-			t, label = toneYellow, "replaced"
+			p.itemLine(toneMagenta, symReplace, "", e, "")
 		case apply.SkippedByUser:
-			t, label = toneDim, "skipped"
+			p.itemLine(toneYellow, symProblem, "skipped", e, "")
 		case apply.Failed:
-			t, label = toneRed, "failed"
+			p.itemLine(toneYellow, symProblem, "failed", e, "")
 		default:
-			t, label = toneDim, "not processed"
-		}
-		p.entryLine(p.badge(t, label), ir.Item.Result.Entry)
-		if ir.ArchivePath != "" {
-			p.printf("             archive: %s\n", p.display(ir.ArchivePath))
+			p.itemLine(toneYellow, symProblem, "not processed", e, "")
 		}
 		if ir.Err != nil {
-			p.itemErrors(ir.Err)
+			p.errorDetails(ir.Err)
+		}
+		if ir.ArchivePath != "" {
+			p.detail(toneDim, "backup: "+p.display(ir.ArchivePath))
 		}
 		if ir.Warning != nil {
-			p.printf("             %s %s\n", p.paint(toneYellow, "warning:"), oneLine(ir.Warning.Error()))
+			p.detail(toneYellow, "warning: "+oneLine(ir.Warning.Error()))
 			warnings++
 		}
 	}
-	p.printf("\n%d created, %d already ok, %d replaced, %d skipped by user, %d failed, %d not processed",
-		rep.Created(), rep.AlreadyOK(), rep.Replaced(), rep.SkippedByUser(), rep.Failed(), rep.NotProcessed())
-	if warnings > 0 {
-		p.printf(", %d warning(s)", warnings)
-	}
 	p.printf("\n")
+	if rep.Created()+rep.Replaced()+rep.SkippedByUser()+rep.Failed()+rep.NotProcessed() == 0 {
+		p.printf("%s\n", upToDate)
+		return
+	}
+	p.printf("%s\n", summary(count{rep.Created(), "created"}, count{rep.Replaced(), "replaced"},
+		count{rep.AlreadyOK(), "already ok"}, count{rep.SkippedByUser(), "skipped"},
+		count{rep.Failed(), "failed"}, count{rep.NotProcessed(), "not processed"}, count{warnings, "warning(s)"}))
 }
 
 // RestorePlan prints what restoring an archive would do.
