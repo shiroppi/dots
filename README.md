@@ -7,6 +7,8 @@
 
 Your dotfiles, your environment.
 
+A small, declarative dotfiles manager for people who want their configuration to stay simple.
+
 > [!NOTE]
 > Although this software is under construction, it currently works largely in accordance with the v0.1 architecture document.
 
