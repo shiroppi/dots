@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"errors"
 	"os"
 	"sort"
 	"time"
@@ -13,8 +14,14 @@ type osManager struct{}
 // NewOS returns a Manager backed by the os package.
 func NewOS() Manager { return osManager{} }
 
-func (osManager) Lstat(name string) (FileInfo, error)  { return os.Lstat(name) }
-func (osManager) Stat(name string) (FileInfo, error)   { return os.Stat(name) }
+func (osManager) Lstat(name string) (FileInfo, error) { return os.Lstat(name) }
+func (osManager) Stat(name string) (FileInfo, error) {
+	fi, err := os.Stat(name)
+	if err != nil && isLinkLoop(err) && !errors.Is(err, ErrLinkLoop) {
+		return nil, &linkLoopError{err: err}
+	}
+	return fi, err
+}
 func (osManager) Readlink(name string) (string, error) { return os.Readlink(name) }
 
 // Symlink pre-checks the destination because on Windows os.Symlink onto an
@@ -86,3 +93,10 @@ func (osManager) Chmod(name string, mode FileMode) error {
 func (osManager) Chtimes(name string, atime, mtime time.Time) error {
 	return os.Chtimes(name, atime, mtime)
 }
+
+// linkLoopError marks a cyclic symlink error so that both ErrLinkLoop and the
+// original OS error remain inspectable with errors.Is / errors.As.
+type linkLoopError struct{ err error }
+
+func (e *linkLoopError) Error() string   { return e.err.Error() }
+func (e *linkLoopError) Unwrap() []error { return []error{ErrLinkLoop, e.err} }

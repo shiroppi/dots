@@ -231,6 +231,7 @@ func (p *Printer) Plan(plan *apply.Plan) {
 
 // Report prints the outcome of apply.
 func (p *Printer) Report(rep *apply.Report) {
+	warnings := 0
 	for _, ir := range rep.Items {
 		var t tone
 		var label string
@@ -255,9 +256,17 @@ func (p *Printer) Report(rep *apply.Report) {
 		if ir.Err != nil {
 			p.itemErrors(ir.Err)
 		}
+		if ir.Warning != nil {
+			p.printf("             %s %s\n", p.paint(toneYellow, "warning:"), oneLine(ir.Warning.Error()))
+			warnings++
+		}
 	}
-	p.printf("\n%d created, %d already ok, %d replaced, %d skipped by user, %d failed, %d not processed\n",
+	p.printf("\n%d created, %d already ok, %d replaced, %d skipped by user, %d failed, %d not processed",
 		rep.Created(), rep.AlreadyOK(), rep.Replaced(), rep.SkippedByUser(), rep.Failed(), rep.NotProcessed())
+	if warnings > 0 {
+		p.printf(", %d warning(s)", warnings)
+	}
+	p.printf("\n")
 }
 
 // RestorePlan prints what restoring an archive would do.
@@ -296,3 +305,6 @@ func describeExisting(r state.Result) string {
 		return "existing item"
 	}
 }
+
+// Display returns path as shown to the user (home abbreviated to ~).
+func (p *Printer) Display(path string) string { return p.display(path) }

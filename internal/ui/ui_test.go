@@ -299,3 +299,11 @@ func TestConflictTitle(t *testing.T) {
 	title := conflictTitle(it, p("home"))
 	checkContains(t, title, "~"+string(filepath.Separator)+"w", "symbolic link -> ../z")
 }
+
+func TestReportWarning(t *testing.T) {
+	ir := apply.ItemReport{Item: item("w", state.NotExist, apply.ActionCreate, nil), Outcome: apply.Replaced,
+		ArchivePath: p("backups", "a.tar.gz"), Warning: errors.New("leftover not removed")}
+	rep := &apply.Report{Items: []apply.ItemReport{ir}}
+	out := render(func(pr *Printer) { pr.Report(rep) })
+	checkContains(t, out, "[replaced]", "warning: leftover not removed", "0 failed, 0 not processed, 1 warning(s)")
+}

@@ -103,6 +103,9 @@ type ItemReport struct {
 	ArchivePath string
 	// Err is set when Outcome is Failed.
 	Err error
+	// Warning is a non-fatal problem on a successful item (for example a
+	// leftover temporary copy that could not be deleted).
+	Warning error
 }
 
 // Report lists the outcome of every plan item, in plan order.
@@ -240,9 +243,14 @@ func Execute(fsys fs.Manager, plan *Plan, opts Options) (*Report, error) {
 			archive, err := opts.Replacer.Replace(it.Target(), func() error { return place(fsys, it) })
 			ir.ArchivePath = archive
 			if err != nil {
-				err = wrapSymlinkErr(err)
-				ir.Outcome, ir.Err = Failed, err
-				return stop(it.Target(), err)
+				var ok interface{ ReplaceSucceeded() bool }
+				if errors.As(err, &ok) && ok.ReplaceSucceeded() {
+					ir.Warning = err
+				} else {
+					err = wrapSymlinkErr(err)
+					ir.Outcome, ir.Err = Failed, err
+					return stop(it.Target(), err)
+				}
 			}
 			ir.Outcome = Replaced
 		default:

@@ -54,6 +54,10 @@ func (w *CleanupWarning) Error() string {
 
 func (w *CleanupWarning) Unwrap() error { return w.Err }
 
+// ReplaceSucceeded reports that the replacement itself succeeded; callers
+// that must not import this package can detect it through an interface.
+func (w *CleanupWarning) ReplaceSucceeded() bool { return true }
+
 // Replace archives target, moves it aside, calls place to create the new
 // content at target and then deletes the moved-aside original.
 //

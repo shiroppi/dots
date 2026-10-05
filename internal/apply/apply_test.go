@@ -2,6 +2,7 @@ package apply
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -432,5 +433,42 @@ func TestExecuteRealOS(t *testing.T) {
 	mustNil(t, err)
 	if rep.AlreadyOK() != 2 {
 		t.Fatalf("second run: %+v", rep.Items)
+	}
+}
+
+type warnErr struct{}
+
+func (warnErr) Error() string          { return "cleanup failed" }
+func (warnErr) ReplaceSucceeded() bool { return true }
+
+// warnReplacer behaves like fakeReplacer but reports a non-fatal warning.
+type warnReplacer struct{ fakeReplacer }
+
+func (w *warnReplacer) Replace(target string, place func() error) (string, error) {
+	a, err := w.fakeReplacer.Replace(target, place)
+	if err != nil {
+		return a, err
+	}
+	return a, fmt.Errorf("wrapped: %w", warnErr{})
+}
+
+func TestExecuteReplaceWarningIsNotFailure(t *testing.T) {
+	m := newFS(t)
+	mustNil(t, fs.WriteFile(m, ent("a").Target, []byte("old"), 0o644))
+	mustNil(t, fs.WriteFile(m, ent("b").Target, []byte("old"), 0o644))
+	rp := &warnReplacer{fakeReplacer{fsys: m}}
+	plan := BuildPlan(m, resolution("a", "b", "c"))
+	rep, err := Execute(m, plan, Options{Prompter: &fakePrompter{decisions: []Decision{Yes}}, Replacer: rp})
+	mustNil(t, err)
+	if rep.Replaced() != 2 || rep.Created() != 1 || rep.Failed() != 0 || rep.NotProcessed() != 0 {
+		t.Fatalf("report: %+v", rep.Items)
+	}
+	for _, ir := range rep.Items {
+		if ir.Outcome == Replaced && (ir.Warning == nil || ir.Err != nil || ir.ArchivePath == "") {
+			t.Errorf("replaced item: %+v", ir)
+		}
+		if ir.Outcome == Created && ir.Warning != nil {
+			t.Errorf("unexpected warning on created item")
+		}
 	}
 }

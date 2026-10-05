@@ -151,3 +151,22 @@ func TestParity(t *testing.T) {
 		})
 	}
 }
+
+func TestOSStatLinkLoop(t *testing.T) {
+	d := t.TempDir()
+	a, b := filepath.Join(d, "a"), filepath.Join(d, "b")
+	if err := os.Symlink("b", a); err != nil {
+		t.Skipf("symlinks not permitted: %v", err)
+	}
+	if err := os.Symlink("a", b); err != nil {
+		t.Skipf("symlinks not permitted: %v", err)
+	}
+	_, err := dfs.NewOS().Stat(a)
+	if !errors.Is(err, dfs.ErrLinkLoop) {
+		t.Fatalf("want ErrLinkLoop, got %v", err)
+	}
+	var pe *os.PathError
+	if !errors.As(err, &pe) {
+		t.Fatalf("original PathError not inspectable: %v", err)
+	}
+}
