@@ -90,6 +90,14 @@ func (a *App) printer() *ui.Printer {
 	return &ui.Printer{W: a.Stdout, Color: a.Color, Home: a.Env.Home}
 }
 
+// printerFor is printer with the repository root of res, for output that
+// shows sources.
+func (a *App) printerFor(res *model.Resolution) *ui.Printer {
+	pr := a.printer()
+	pr.Root = res.Root
+	return pr
+}
+
 // store builds the backup store; the directory is computed only when needed.
 func (a *App) store() (*backup.Store, error) {
 	dir := a.BackupDir
@@ -253,7 +261,7 @@ func newDoctorCmd(app *App) *cobra.Command {
 				return err
 			}
 			plan := apply.BuildPlan(app.FS, res)
-			if !app.printer().Doctor(plan) {
+			if !app.printerFor(res).Doctor(plan) {
 				return silentError{}
 			}
 			return nil
@@ -274,7 +282,7 @@ func newApplyCmd(app *App) *cobra.Command {
 				return err
 			}
 			plan := apply.BuildPlan(app.FS, res)
-			pr := app.printer()
+			pr := app.printerFor(res)
 			if dryRun {
 				pr.Plan(plan)
 				if plan.HasErrors() {

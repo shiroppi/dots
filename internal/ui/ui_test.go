@@ -318,3 +318,23 @@ func TestDirEntryRendering(t *testing.T) {
 		t.Fatalf("got %q", out)
 	}
 }
+
+func TestRepoRelativeSources(t *testing.T) {
+	out := render(func(pr *Printer) { pr.Root = root(); pr.Doctor(testPlan()) })
+	checkContains(t, out, "Repository: "+root()+"\n\n", " -> "+filepath.Join("src", "ok")+"  ")
+	if strings.Contains(out, p("src", "ok")) {
+		t.Errorf("absolute source still shown:\n%s", out)
+	}
+	if out2 := render(func(pr *Printer) { pr.Doctor(testPlan()) }); strings.Contains(out2, "Repository:") {
+		t.Errorf("header printed without Root:\n%s", out2)
+	}
+}
+
+func TestRelUnder(t *testing.T) {
+	if _, ok := relUnder(p("a"), p("ab", "x"), "linux"); ok {
+		t.Error("sibling prefix must not match")
+	}
+	if _, ok := relUnder(p("a"), p("a"), "linux"); ok {
+		t.Error("root itself must not match")
+	}
+}

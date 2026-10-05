@@ -22,6 +22,7 @@ type Printer struct {
 	W     io.Writer
 	Color bool   // false: plain text, no ANSI escapes
 	Home  string // when non-empty, paths under Home are shown as ~/... (display only)
+	Root  string // repository root (absolute); when set, sources under it are shown relative to it
 }
 
 type tone int
@@ -54,6 +55,53 @@ func (p *Printer) printf(format string, a ...interface{}) {
 
 func (p *Printer) display(path string) string {
 	return displayPath(p.Home, path, hostOS)
+}
+
+// displaySource shows a source path relative to Root when it lies inside it,
+// and otherwise like any other path.
+func (p *Printer) displaySource(path string) string {
+	if p.Root != "" {
+		if rel, ok := relUnder(p.Root, path, hostOS); ok {
+			return rel
+		}
+	}
+	return p.display(path)
+}
+
+// header prints the repository line (only when Root is set).
+func (p *Printer) header() {
+	if p.Root != "" {
+		p.printf("Repository: %s\n\n", p.display(p.Root))
+	}
+}
+
+// relUnder returns path relative to root when path is strictly inside root.
+// Matching is case-insensitive on windows and darwin.
+func relUnder(root, path, goos string) (string, bool) {
+	root = filepath.Clean(root)
+	if len(path) <= len(root) {
+		return "", false
+	}
+	head, rest := path[:len(root)], path[len(root):]
+	if goos == "windows" || goos == "darwin" {
+		if !strings.EqualFold(head, root) {
+			return "", false
+		}
+	} else if head != root {
+		return "", false
+	}
+	sep := string(filepath.Separator)
+	switch {
+	case strings.HasPrefix(rest, sep):
+		rest = strings.TrimLeft(rest, sep)
+	case strings.HasSuffix(root, sep): // root is a filesystem root
+	default:
+		return "", false
+	}
+	if rest == "" {
+		return "", false
+	}
+	return rest, true
 }
 
 // displayPath abbreviates a leading home directory as "~". The separator
@@ -126,7 +174,7 @@ func (p *Printer) entryLine(badge string, e model.Entry) {
 		p.printf("%s %s (directory)  %s\n", badge, p.display(e.Target), p.paint(toneDim, "("+e.Origin.String()+")"))
 		return
 	}
-	p.printf("%s %s -> %s  %s\n", badge, p.display(e.Target), p.display(e.Source), p.paint(toneDim, "("+e.Origin.String()+")"))
+	p.printf("%s %s -> %s  %s\n", badge, p.display(e.Target), p.displaySource(e.Source), p.paint(toneDim, "("+e.Origin.String()+")"))
 }
 
 func (p *Printer) overrides(ovs []model.Override) {
@@ -140,7 +188,7 @@ func (p *Printer) overrides(ovs []model.Override) {
 		if o.Loser.Kind == model.KindDir {
 			p.printf("    loser:  %s (directory)\n", o.Loser.Origin.String())
 		} else {
-			p.printf("    loser:  %s -> %s\n", o.Loser.Origin.String(), p.display(o.Loser.Source))
+			p.printf("    loser:  %s -> %s\n", o.Loser.Origin.String(), p.displaySource(o.Loser.Source))
 		}
 	}
 }
@@ -166,6 +214,7 @@ func doctorBadge(r state.Result) (tone, string) {
 // Doctor prints the doctor report (spec §8). ok is false when any item is not
 // a valid link or has an error.
 func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
+	p.header()
 	ok = true
 	counts := map[string]int{}
 	for _, it := range plan.Items {
@@ -200,6 +249,7 @@ func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
 
 // Plan prints the apply --dry-run plan.
 func (p *Printer) Plan(plan *apply.Plan) {
+	p.header()
 	var nCreate, nSkip, nReplace, nErr int
 	for _, it := range plan.Items {
 		r := it.Result
@@ -243,6 +293,7 @@ func (p *Printer) Plan(plan *apply.Plan) {
 
 // Report prints the outcome of apply.
 func (p *Printer) Report(rep *apply.Report) {
+	p.header()
 	warnings := 0
 	for _, ir := range rep.Items {
 		var t tone
