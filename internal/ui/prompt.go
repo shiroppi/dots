@@ -22,26 +22,31 @@ var ErrAborted = errors.New("aborted by user")
 
 const (
 	choiceYes     = "Yes – back up and replace"
-	choiceYesAll  = "Yes to all"
 	choiceNo      = "No – skip"
-	choiceNoAll   = "No to all"
 	choiceRestore = "Back up current content and restore"
 	choiceSkip    = "Skip"
+
+	// labelRest is the checkbox that applies the answer to the remaining
+	// conflicts.
+	labelRest = "Process the rest of the files similarly"
 )
 
-var conflictChoices = []string{choiceYes, choiceYesAll, choiceNo, choiceNoAll}
+var conflictChoices = []string{choiceYes, choiceNo}
 
-// decisionFor maps a conflict prompt choice to a Decision.
-func decisionFor(choice string) (apply.Decision, error) {
+// decisionFor maps a conflict prompt choice and the "process the rest"
+// checkbox to a Decision.
+func decisionFor(choice string, rest bool) (apply.Decision, error) {
 	switch choice {
 	case choiceYes:
+		if rest {
+			return apply.YesToAll, nil
+		}
 		return apply.Yes, nil
-	case choiceYesAll:
-		return apply.YesToAll, nil
 	case choiceNo:
+		if rest {
+			return apply.NoToAll, nil
+		}
 		return apply.No, nil
-	case choiceNoAll:
-		return apply.NoToAll, nil
 	}
 	return 0, fmt.Errorf("unknown choice %q", choice)
 }
@@ -57,7 +62,7 @@ func restoreFor(choice string) (bool, error) {
 	return false, fmt.Errorf("unknown choice %q", choice)
 }
 
-// Prompter implements apply.Prompter with a huh Select of 4 choices.
+// Prompter implements apply.Prompter with a huh form of a 2-choice Select and a "process the rest" checkbox.
 type Prompter struct {
 	In   io.Reader
 	Out  io.Writer
@@ -71,14 +76,21 @@ func conflictTitle(item apply.Item, home string) string {
 		displayPath(home, r.Entry.Source, hostOS))
 }
 
-// Confirm asks what to do with one conflicting target. Ctrl-C yields
-// ErrAborted.
+// Confirm asks what to do with one conflicting target. Ctrl-C, or any other
+// way of leaving the prompt without submitting, yields ErrAborted.
 func (p *Prompter) Confirm(item apply.Item) (apply.Decision, error) {
-	choice, err := runSelect(p.In, p.Out, conflictTitle(item, p.Home), conflictChoices)
-	if err != nil {
+	var choice string
+	var rest []bool
+	form := newForm(p.In, p.Out,
+		huh.NewSelect[string]().Title(conflictTitle(item, p.Home)).
+			Options(options(conflictChoices)...).Value(&choice),
+		huh.NewMultiSelect[bool]().
+			Options(huh.NewOption(labelRest, true)).Value(&rest),
+	)
+	if err := runForm(form); err != nil {
 		return 0, err
 	}
-	return decisionFor(choice)
+	return decisionFor(choice, len(rest) > 0)
 }
 
 // ConfirmRestore asks whether to back up the current content and restore.

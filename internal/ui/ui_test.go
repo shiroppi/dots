@@ -259,24 +259,26 @@ func TestNoColorHasNoEscapes(t *testing.T) {
 func TestDecisionFor(t *testing.T) {
 	tests := []struct {
 		choice string
+		rest   bool
 		want   apply.Decision
 	}{
-		{choiceYes, apply.Yes}, {choiceYesAll, apply.YesToAll}, {choiceNo, apply.No}, {choiceNoAll, apply.NoToAll},
+		{choiceYes, false, apply.Yes}, {choiceYes, true, apply.YesToAll},
+		{choiceNo, false, apply.No}, {choiceNo, true, apply.NoToAll},
 	}
 	for _, tc := range tests {
-		got, err := decisionFor(tc.choice)
+		got, err := decisionFor(tc.choice, tc.rest)
 		if err != nil || got != tc.want {
-			t.Errorf("decisionFor(%q) = %v, %v; want %v", tc.choice, got, err, tc.want)
+			t.Errorf("decisionFor(%q, %v) = %v, %v; want %v", tc.choice, tc.rest, got, err, tc.want)
 		}
 	}
-	if _, err := decisionFor("nope"); err == nil {
+	if _, err := decisionFor("nope", false); err == nil {
 		t.Error("want error for unknown choice")
 	}
-	if len(conflictChoices) != 4 {
-		t.Errorf("want 4 choices, got %d", len(conflictChoices))
+	if len(conflictChoices) != 2 {
+		t.Errorf("want 2 choices, got %d", len(conflictChoices))
 	}
 	for _, c := range conflictChoices {
-		if _, err := decisionFor(c); err != nil {
+		if _, err := decisionFor(c, false); err != nil {
 			t.Errorf("choice %q unmapped", c)
 		}
 	}
