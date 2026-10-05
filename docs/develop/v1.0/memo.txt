@@ -135,3 +135,186 @@ microsoft_id = "2131313"
         説明: dotfilesリポジトリのディレクトリに移動する（またはパスを出力する）。
 
         理由: cd $(dots cd) のように使うことで、どこにいても一瞬でdotfilesディレクトリに飛べるようになります。
+
+もちろんです。ここまでの話を少し広げると、こういう設計思想です。
+
+## `dots` のプラグイン構想
+
+### 1. 基本思想
+
+`dots` は **dotfiles管理に必要な最小限のコア**だけを持つ。
+
+```text
+dots
+├── config
+├── deploy
+├── platform
+└── profile
+```
+
+その上で、追加機能はプラグインとして提供する。
+
+```text
+dots
+├── core
+└── plugins
+    ├── source
+    ├── bootstrap
+    └── ...
+```
+
+つまり、
+
+> **dots = dotfiles manager + 拡張可能なプラットフォーム**
+
+という位置づけ。
+
+---
+
+### 2. `source` はプラグインの第一号
+
+今回考えていた `source` は、
+
+> 外部リポジトリから必要な設定・スクリプトなどを取り込む
+
+ための機能。
+
+例えばOmarchyから一部だけ持ってくる。
+
+```toml
+[[source]]
+name = "omarchy-agent-usage"
+repository = "https://github.com/omacom/omarchy"
+path = "bin/omarchy-agent-usage-claude"
+```
+
+これを `source.dots` というプラグインとして実装する。
+
+---
+
+### 3. 実装方式はGoのpluginではなく外部プロセス
+
+Goには `plugin` パッケージがありますが、これはWindows対応などを考えると不向き。
+
+そこで **GitHub CLIのextension方式**を参考にする。
+
+```text
+dots
+  ↓
+source.dots
+```
+
+`source.dots` は普通の実行ファイル。
+
+```text
+~/.local/bin/
+├── dots
+├── source.dots
+└── bootstrap.dots
+```
+
+`dots` が `source.dots` を発見して起動する。
+
+---
+
+### 4. gh CLIとの関係
+
+かなり `gh` に近い。
+
+```text
+gh foo
+ ↓
+gh-foo
+```
+
+```text
+dots source
+ ↓
+source.dots
+```
+
+ただし思想としては少し違う。
+
+`gh` のextensionは主に**新しいCLIコマンドを追加するもの**。
+
+一方 `dots` のpluginは、
+
+> **dotsそのものに新しい能力を追加するもの**
+
+にしたい。
+
+例えば、
+
+```text
+dots
+├── core
+├── source plugin
+├── bootstrap plugin
+├── secrets plugin
+└── ...
+```
+
+という感じ。
+
+---
+
+### 5. プラグインAPIは最初は極小でいい
+
+最初から巨大なplugin frameworkを設計しない。
+
+まずは、
+
+```text
+dots
+ ↓
+プラグインを探す
+ ↓
+実行する
+ ↓
+引数を渡す
+```
+
+だけ。
+
+必要になったら後から、
+
+- 設定へのアクセス
+- hooks
+- events
+- JSON/RPC
+- plugin metadata
+- lifecycle
+
+などを追加する。
+
+---
+
+## 最終的なイメージ
+
+```text
+                  dots
+                   │
+          ┌────────┴────────┐
+          │      Core       │
+          │                 │
+          │ config          │
+          │ deploy          │
+          │ platform        │
+          │ profile         │
+          └────────┬────────┘
+                   │
+              Plugin API
+                   │
+       ┌───────────┼───────────┐
+       ↓           ↓           ↓
+    source     bootstrap    other
+       │
+       ↓
+ 外部dotfiles / scripts
+```
+
+これなら **「ユーザーのdotfiles構造を矯正しない」**という `dots` の思想とも噛み合います。
+
+**Coreは小さく、必要な能力だけユーザーが追加する。**
+
+その意味で、`source` を単なる機能として本体に詰め込むより、**「dotsをNeovimのような拡張可能な基盤にする」**という発想の方が面白いと思います。
