@@ -28,7 +28,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: gofmt
         run: |
@@ -67,7 +67,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: Test
         run: go test -race -cover ./...
@@ -115,7 +115,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: stable
 
       - name: Build all targets
         env:
