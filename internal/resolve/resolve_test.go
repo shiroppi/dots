@@ -591,3 +591,80 @@ ignore = ["only"]
 		t.Fatalf("expected parent/child error, got %v", err)
 	}
 }
+
+func TestAutoEmptyRoot(t *testing.T) {
+	m := build(t, tree{
+		dirs:  []string{"empty1", "empty2", "nested/sub"},
+		files: []string{"f"},
+	})
+
+	// Scenario 1: Empty root, target "."
+	_, err := run(t, m, "linux", "[[auto]]\nsource = \"empty1\"\ntarget = \".\"\n")
+	if err == nil || !strings.Contains(err.Error(), "refusing to replace") || !strings.Contains(err.Error(), "the repository root") {
+		t.Errorf("empty root, repo target: %v", err)
+	}
+
+	// Scenario 2: Empty root in auto.linux
+	// An OS-only group still needs its (empty) parent [[auto]] element.
+	res, err := run(t, m, "linux", "[[auto]]\n\n[[auto.linux]]\nsource = \"empty1\"\ntarget = \"~/.cfg\"\n")
+	must(t, err)
+	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindLink || res.Entries[0].Target != h(".cfg") || res.Entries[0].Origin.Layer != model.LayerAutoOS {
+		t.Errorf("empty root auto.linux: %+v", res.Entries)
+	}
+
+	// Scenario 3: auto and auto.linux empty root, same target -> Override
+	res, err = run(t, m, "linux", `
+[[auto]]
+source = "empty1"
+target = "~/.cfg"
+
+[[auto.linux]]
+source = "empty2"
+target = "~/.cfg"
+`)
+	must(t, err)
+	if len(res.Entries) != 1 || res.Entries[0].Source != p("empty2") {
+		t.Errorf("expected auto.linux to win, got: %v", summary(res))
+	}
+	if len(res.Overrides) != 1 || res.Overrides[0].Winner.Layer != model.LayerAutoOS || res.Overrides[0].Loser.Origin.Layer != model.LayerAuto {
+		t.Errorf("expected auto override, got: %+v", res.Overrides)
+	}
+
+	// Scenario 4: Two common [[auto]] groups, same target -> duplicate error
+	_, err = run(t, m, "linux", `
+[[auto]]
+source = "empty1"
+target = "~/.cfg"
+
+[[auto]]
+source = "empty2"
+target = "~/.cfg"
+`)
+	if err == nil || !strings.Contains(err.Error(), "duplicate target") {
+		t.Errorf("expected duplicate error, got %v", err)
+	}
+
+	// Scenario 5: Empty-root link at ~/.cfg plus another rule placing files under ~/.cfg/x
+	_, err = run(t, m, "linux", `
+[dots]
+"~/.cfg/x" = "f"
+
+[[auto]]
+source = "empty1"
+target = "~/.cfg"
+`)
+	if err == nil || !strings.Contains(err.Error(), "inside target") {
+		t.Errorf("expected inside target error, got %v", err)
+	}
+
+	// Scenario 6: Source root containing only an empty subdirectory "sub"
+	res, err = run(t, m, "linux", `
+[[auto]]
+source = "nested"
+target = "~/.cfg"
+`)
+	must(t, err)
+	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindLink || res.Entries[0].Target != h(".cfg", "sub") {
+		t.Errorf("expected nested sub link, got: %+v", res.Entries)
+	}
+}
