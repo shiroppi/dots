@@ -80,12 +80,13 @@ func TestDoctor(t *testing.T) {
 		t.Error("ok = true, want false")
 	}
 	checkContains(t, out,
-		"[OK]", "[MISSING]", "[WRONG LINK]", "[CONFLICT]", "[ERROR]",
-		p("home", "ok")+" -> "+p("src", "ok"), `(dots."ok")`,
+		"\u2713 "+p("home", "ok")+" -> "+p("src", "ok")+`  dots."ok"`,
+		"\u00d7 "+p("home", "missing"),
+		"! wrong link "+p("home", "wrong"), "! conflict "+p("home", "conflict"), "! error "+p("home", "bad"),
 		"current link: ../elsewhere",
-		"! source does not exist", "! overlap",
-		"Overridden rules:", `winner: dots."win"`, "loser:  auto[0] -> "+p("src", "lose"),
-		"5 link(s): 1 ok, 1 missing, 1 wrong link, 1 conflict, 1 error, 1 overridden rule(s)",
+		"    source does not exist", "    overlap",
+		"Overridden rules:", `kept:    dots."win"`, "ignored: auto[0] -> "+p("src", "lose"),
+		"1 ok, 1 missing, 1 wrong link, 1 conflict, 1 error, 1 overridden rule(s)",
 		"Not OK",
 	)
 }
@@ -97,7 +98,7 @@ func TestDoctorOK(t *testing.T) {
 	if !ok {
 		t.Error("ok = false, want true")
 	}
-	checkContains(t, out, "1 link(s): 1 ok, 0 missing", "Everything is in order.")
+	checkContains(t, out, "1 ok\n", "Everything is in order.")
 	if strings.Contains(out, "Overridden") {
 		t.Error("unexpected overrides section")
 	}
@@ -105,27 +106,33 @@ func TestDoctorOK(t *testing.T) {
 	if !ok {
 		t.Error("empty plan should be ok")
 	}
-	checkContains(t, empty, "0 link(s)")
+	checkContains(t, empty, "No links are defined.")
 }
 
 func TestPlan(t *testing.T) {
 	out := render(func(pr *Printer) { pr.Plan(testPlan()) })
 	checkContains(t, out,
-		"[create]", "[skip]", "[replace]", "[error]",
-		"already linked",
-		"existing symbolic link -> ../elsewhere (backed up first)",
-		"existing file or directory (backed up first)",
-		"! source does not exist",
+		"  \u2713 "+p("home", "ok")+"\n", "  + "+p("home", "missing")+"\n", "  ~ "+p("home", "wrong")+"\n",
+		"! error "+p("home", "bad"),
+		"existing symbolic link -> ../elsewhere; will be backed up and replaced after confirmation",
+		"existing file or directory; will be backed up and replaced after confirmation",
+		"    source does not exist",
 		"Overridden rules:",
-		"5 link(s): 1 to create, 1 already linked, 2 to replace, 1 error",
-		"2 conflict(s) will ask for confirmation",
+		"1 to create, 2 to replace, 1 already ok, 1 error(s)",
 	)
+	if strings.Contains(out, `dots."ok"`) || strings.Contains(out, p("src", "ok")) {
+		t.Errorf("plan lines must not show mapping or origin:\n%s", out)
+	}
 	noConf := render(func(pr *Printer) {
 		pr.Plan(&apply.Plan{Items: []apply.Item{item("m", state.NotExist, apply.ActionCreate, nil)}})
 	})
-	if strings.Contains(noConf, "conflict(s)") {
-		t.Errorf("unexpected conflict footer:\n%s", noConf)
+	if strings.Contains(noConf, "replace") {
+		t.Errorf("zero counts must be omitted:\n%s", noConf)
 	}
+	upToDate := render(func(pr *Printer) {
+		pr.Plan(&apply.Plan{Items: []apply.Item{item("o", state.ValidLink, apply.ActionSkip, nil)}})
+	})
+	checkContains(t, upToDate, "Everything is up to date.")
 }
 
 func TestReport(t *testing.T) {
@@ -148,9 +155,10 @@ func TestReport(t *testing.T) {
 	}}
 	out := render(func(pr *Printer) { pr.Report(rep) })
 	checkContains(t, out,
-		"[created]", "[ok]", "[replaced]", "[skipped]", "[failed]", "[not processed]",
-		"archive: "+arch, "! boom",
-		"1 created, 1 already ok, 1 replaced, 2 skipped by user, 1 failed, 1 not processed",
+		"  + "+p("home", "c"), "  \u2713 "+p("home", "a"), "  ~ "+p("home", "r"), "! skipped "+p("home", "s1"),
+		"! failed "+p("home", "f"), "! not processed "+p("home", "n"),
+		"backup: "+arch, "    boom",
+		"1 created, 1 replaced, 1 already ok, 2 skipped, 1 failed, 1 not processed",
 	)
 }
 
@@ -232,7 +240,7 @@ func TestPrinterHome(t *testing.T) {
 	var b bytes.Buffer
 	pr := &Printer{W: &b, Home: p("home")}
 	pr.Plan(&apply.Plan{Items: []apply.Item{item("m", state.NotExist, apply.ActionCreate, nil)}})
-	checkContains(t, b.String(), "~"+string(filepath.Separator)+"m ->")
+	checkContains(t, b.String(), "  + ~"+string(filepath.Separator)+"m\n")
 }
 
 func TestNoColorHasNoEscapes(t *testing.T) {
@@ -305,16 +313,17 @@ func TestReportWarning(t *testing.T) {
 		ArchivePath: p("backups", "a.tar.gz"), Warning: errors.New("leftover not removed")}
 	rep := &apply.Report{Items: []apply.ItemReport{ir}}
 	out := render(func(pr *Printer) { pr.Report(rep) })
-	checkContains(t, out, "[replaced]", "warning: leftover not removed", "0 failed, 0 not processed, 1 warning(s)")
+	checkContains(t, out, "  ~ ", "    warning: leftover not removed", "1 replaced, 1 warning(s)")
 }
 
 func TestDirEntryRendering(t *testing.T) {
 	var buf bytes.Buffer
 	pr := &Printer{W: &buf}
-	pr.entryLine("[x]", model.Entry{Target: "/t/d", Source: "/s/d", Kind: model.KindDir, Origin: model.Origin{Rule: "auto[0]"}})
+	e := model.Entry{Target: "/t/d", Source: "/s/d", Kind: model.KindDir, Origin: model.Origin{Rule: "auto[0]"}}
+	pr.itemLine(toneNone, symOK, "", e, pr.mapping(e))
 	pr.overrides([]model.Override{{Target: "/t/d", Loser: model.Entry{Kind: model.KindDir, Origin: model.Origin{Rule: "auto[1]"}}}})
 	out := buf.String()
-	if !strings.Contains(out, "(directory)  (auto[0])") || strings.Contains(out, "->") || !strings.Contains(out, "auto[1] (directory)") {
+	if !strings.Contains(out, string(filepath.Separator)+"  auto[0]") || strings.Contains(out, "->") || !strings.Contains(out, "ignored: auto[1] (directory)") {
 		t.Fatalf("got %q", out)
 	}
 }
@@ -416,7 +425,7 @@ func TestOverridesAndDirSources(t *testing.T) {
 		pr.Root = p("repo")
 		pr.Plan(plan)
 	})
-	checkContains(t, out, "loser:  lose -> lose", "(directory)")
+	checkContains(t, out, "ignored: lose -> lose", p("d")+string(filepath.Separator)+"\n")
 	if strings.Contains(out, p("repo", "lose")) {
 		t.Errorf("loser source not relative: %q", out)
 	}

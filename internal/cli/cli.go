@@ -317,16 +317,13 @@ func newApplyCmd(app *App) *cobra.Command {
 			if rep == nil {
 				// Rejected before any change: show what is wrong.
 				if err != nil {
-					pr.Plan(plan)
+					pr.Blocked(plan)
 				}
 				return pr.WrapError(err)
 			}
 			pr.Report(rep)
 			if err != nil {
 				return pr.WrapError(err)
-			}
-			if rep.Created() == 0 && rep.Replaced() == 0 && rep.SkippedByUser() == 0 {
-				fmt.Fprintln(app.Stdout, "Nothing to do: everything is already linked.")
 			}
 			return nil
 		},

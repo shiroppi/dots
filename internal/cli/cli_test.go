@@ -230,8 +230,8 @@ func TestDoctor(t *testing.T) {
 	if code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
-	if !strings.Contains(te.out.String(), "MISSING") {
-		t.Errorf("want MISSING, got %q", te.out.String())
+	if !strings.Contains(te.out.String(), "× ") {
+		t.Errorf("want missing mark, got %q", te.out.String())
 	}
 	outStr := strings.ToLower(te.out.String())
 	if !strings.Contains(outStr, "overridden") {
@@ -289,7 +289,7 @@ func TestApply(t *testing.T) {
 	}
 
 	te.out.Reset()
-	if c := te.run("apply"); c != 0 || !strings.Contains(te.out.String(), "already linked") {
+	if c := te.run("apply"); c != 0 || !strings.Contains(te.out.String(), "up to date") {
 		t.Errorf("idempotent apply failed: %d, %q", c, te.out.String())
 	}
 
@@ -643,7 +643,7 @@ ignore = ["**/*.txt"]
 	if c := te.run("apply", "--dry-run"); c != 0 {
 		t.Errorf("dry run failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "create") || !strings.Contains(te.out.String(), "ign (directory)") {
+	if !strings.Contains(te.out.String(), "+ ") || !strings.Contains(te.out.String(), "ign"+string(filepath.Separator)) {
 		t.Errorf("dry-run missing dir create: %q", te.out.String())
 	}
 	if _, err := te.fsys.Stat(p("home", ".cfg", "ign")); err == nil {
@@ -663,7 +663,7 @@ ignore = ["**/*.txt"]
 	if c := te.run("doctor"); c != 0 {
 		t.Errorf("doctor failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "(directory)") || !strings.Contains(te.out.String(), "[OK]") {
+	if !strings.Contains(te.out.String(), "ign"+string(filepath.Separator)) || !strings.Contains(te.out.String(), "✓ ") {
 		t.Errorf("doctor output incorrect: %q", te.out.String())
 	}
 
@@ -672,7 +672,7 @@ ignore = ["**/*.txt"]
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("second apply failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "already ok") {
+	if !strings.Contains(te.out.String(), "up to date") {
 		t.Errorf("second apply should be ok, got %q", te.out.String())
 	}
 }
@@ -857,8 +857,8 @@ func TestCLIHeadersAndRelativeSources(t *testing.T) {
 	if !strings.Contains(out, "Repository: "+root()) {
 		t.Errorf("missing Repository header in apply --dry-run: %q", out)
 	}
-	if !strings.Contains(out, "-> "+relSrc+" ") {
-		t.Errorf("missing relative source in apply --dry-run: %q", out)
+	if strings.Contains(out, "->") {
+		t.Errorf("apply --dry-run should not show the source mapping: %q", out)
 	}
 
 	// Apply report
@@ -869,8 +869,8 @@ func TestCLIHeadersAndRelativeSources(t *testing.T) {
 	if !strings.Contains(out, "Repository: "+root()) {
 		t.Errorf("missing Repository header in apply: %q", out)
 	}
-	if !strings.Contains(out, "-> "+relSrc+" ") {
-		t.Errorf("missing relative source in apply: %q", out)
+	if strings.Contains(out, "->") {
+		t.Errorf("apply should not show the source mapping: %q", out)
 	}
 
 	// Restore dry-run
