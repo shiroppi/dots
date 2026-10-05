@@ -276,12 +276,16 @@ ignore = ["**/README.md", "**/.DS_Store", "skipme"]
 		`home/.cfg/top/keep<-s/top/keep[auto[0]]`,
 	})
 
-	// A physically empty source root produces nothing; a fully-ignored one
-	// produces a single real-directory entry at the target root.
+	// A physically empty source root is placed as one link at the target root;
+	// a fully-ignored one produces a single real-directory entry there.
 	res, err = run(t, m, "linux", "[[auto]]\nsource = \"r\"\ntarget = \"~/.cfg\"\n")
 	must(t, err)
-	if len(res.Entries) != 0 {
+	if len(res.Entries) != 1 || res.Entries[0].Kind == model.KindDir || res.Entries[0].Target != h(".cfg") || res.Entries[0].Source != p("r") {
 		t.Errorf("empty root: %v", summary(res))
+	}
+	_, err = run(t, m, "linux", "[[auto]]\nsource = \"r\"\ntarget = \"~\"\n")
+	if err == nil || !strings.Contains(err.Error(), "refusing to replace the home directory with a symlink") {
+		t.Errorf("empty root, home target: %v", err)
 	}
 	res, err = run(t, m, "linux", "[[auto]]\nsource = \"s/onlyignored\"\ntarget = \"~/.cfg\"\nignore = [\".DS_Store\"]\n")
 	must(t, err)

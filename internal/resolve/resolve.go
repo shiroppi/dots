@@ -192,12 +192,22 @@ func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.La
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return nil, []error{fmt.Errorf("%s: auto source %s must be a directory (not a file or symlink)", rule, sourceRoot)}
 	}
+	if ents, err := fsys.ReadDir(sourceRoot); err == nil && len(ents) == 0 {
+		// Physically empty root: place it as a single link (spec §5.3 rule 4),
+		// unless that would replace the home directory or repository root.
+		if r.Target.IsBase() {
+			return nil, []error{fmt.Errorf("%s: source %s is empty; refusing to replace %s with a symlink", rule, sourceRoot, r.Target.BaseName())}
+		}
+		return []model.Entry{{
+			Target: targetRoot,
+			Source: sourceRoot,
+			Origin: model.Origin{Layer: layer, Rule: rule},
+		}}, nil
+	}
 	w := &walker{fsys: fsys, rule: rule, layer: layer, sourceRoot: sourceRoot, targetRoot: targetRoot, ign: r.Ignore}
 	if n := w.walk(""); n == 0 && len(w.errs) == 0 {
-		// Not physically empty (checked below) but everything was ignored.
-		if ents, err := fsys.ReadDir(sourceRoot); err == nil && len(ents) > 0 {
-			w.emitDir("")
-		}
+		// Not physically empty but everything was ignored.
+		w.emitDir("")
 	}
 	return w.out, w.errs
 }
