@@ -403,3 +403,13 @@ func TestEvaluateDirEntry(t *testing.T) {
 		t.Fatal(ValidDir.String())
 	}
 }
+
+func TestEvaluateParentIsFile(t *testing.T) {
+	m := newFS(t)
+	mustNil(t, fs.WriteFile(m, p("home", "fileparent"), []byte("data"), 0o644))
+	e := model.Entry{Source: p("src", "d"), Target: p("home", "fileparent", "sub"), Kind: model.KindDir}
+	r := Evaluate(m, e)
+	if !errors.Is(r.Err, ErrUnsafeParent) || r.Status != NotExist {
+		t.Fatalf("got status %v err %v, want NotExist + ErrUnsafeParent", r.Status, r.Err)
+	}
+}

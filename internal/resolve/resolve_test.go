@@ -535,3 +535,55 @@ ignore = ["x"]
 		t.Fatalf("got %v", summary(res))
 	}
 }
+
+func TestDirEntriesConflicts(t *testing.T) {
+	m := build(t, tree{files: []string{"s/only", "linksrc/cfg"}, dirs: []string{"linksrc/sub"}})
+
+	// Tie at same layer: KindDir (~/cfg from s) vs KindLink (~/cfg from
+	// linksrc/cfg) -> duplicate error
+	_, err := run(t, m, "linux", `
+[[auto]]
+source = "s"
+target = "~/cfg"
+ignore = ["only"]
+
+[[auto]]
+source = "linksrc"
+target = "~/"
+`)
+	if err == nil || !strings.Contains(err.Error(), "duplicate target") {
+		t.Fatalf("expected duplicate error, got %v", err)
+	}
+
+	// Dots-layer link at same target as auto KindDir -> link wins, KindDir is override
+	res, err := run(t, m, "linux", `
+[[auto]]
+source = "s"
+target = "~/.cfg"
+ignore = ["only"]
+
+[dots]
+"~/.cfg" = "linksrc/cfg"
+`)
+	must(t, err)
+	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindLink {
+		t.Fatalf("expected link to win, got %v", res.Entries)
+	}
+	if len(res.Overrides) != 1 || res.Overrides[0].Loser.Kind != model.KindDir {
+		t.Fatalf("expected KindDir as loser, got %v", res.Overrides)
+	}
+
+	// KindLink ancestor with KindDir below -> parent/child error
+	_, err = run(t, m, "linux", `
+[dots]
+"~/.cfg" = "linksrc/sub"
+
+[[auto]]
+source = "s"
+target = "~/.cfg/sub"
+ignore = ["only"]
+`)
+	if err == nil || !strings.Contains(err.Error(), "inside target") {
+		t.Fatalf("expected parent/child error, got %v", err)
+	}
+}

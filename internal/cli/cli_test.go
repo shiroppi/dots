@@ -542,3 +542,55 @@ func TestExitCodeFunction(t *testing.T) {
 		t.Errorf("want 1 and no output, got %d output %q", c, buf.String())
 	}
 }
+
+func TestAutoDirIgnored(t *testing.T) {
+	te := setupEnv(t)
+	// Create an auto source that only has ignored files.
+	te.fsys.MkdirAll(p("auto-src", "ign"), 0o755)
+	dotsfs.WriteFile(te.fsys, p("auto-src", "ign", "ignored.txt"), []byte("ign"), 0o644)
+
+	toml := `
+[[auto]]
+source = "auto-src"
+target = "~/.cfg"
+ignore = ["**/*.txt"]
+`
+	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644)
+
+	// dry-run apply
+	if c := te.run("apply", "--dry-run"); c != 0 {
+		t.Errorf("dry run failed: %d", c)
+	}
+	if !strings.Contains(te.out.String(), "create") || !strings.Contains(te.out.String(), "ign (directory)") {
+		t.Errorf("dry-run missing dir create: %q", te.out.String())
+	}
+	if _, err := te.fsys.Stat(p("home", ".cfg", "ign")); err == nil {
+		t.Errorf("dry-run should not create dir")
+	}
+
+	// first apply
+	if c := te.run("apply"); c != 0 {
+		t.Errorf("apply failed: %d", c)
+	}
+	info, err := te.fsys.Lstat(p("home", ".cfg", "ign"))
+	if err != nil || !info.IsDir() {
+		t.Errorf("expected directory created: %v", err)
+	}
+
+	// doctor
+	if c := te.run("doctor"); c != 0 {
+		t.Errorf("doctor failed: %d", c)
+	}
+	if !strings.Contains(te.out.String(), "(directory)") || !strings.Contains(te.out.String(), "[OK]") {
+		t.Errorf("doctor output incorrect: %q", te.out.String())
+	}
+
+	// second apply
+	te.out.Reset()
+	if c := te.run("apply"); c != 0 {
+		t.Errorf("second apply failed: %d", c)
+	}
+	if !strings.Contains(te.out.String(), "already ok") {
+		t.Errorf("second apply should be ok, got %q", te.out.String())
+	}
+}

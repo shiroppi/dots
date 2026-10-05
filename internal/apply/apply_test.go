@@ -493,3 +493,79 @@ func TestExecuteDirEntry(t *testing.T) {
 		t.Fatalf("action %v", plan.Items[0].Action)
 	}
 }
+
+func TestExecuteDirEntryConflicts(t *testing.T) {
+	m := newFS(t)
+	e := ent("a")
+	e.Kind = model.KindDir
+	e.Target = p("home", "conflict")
+	res := &model.Resolution{Root: root(), Entries: []model.Entry{e}}
+
+	// Setup conflict (file)
+	mustNil(t, fs.WriteFile(m, e.Target, []byte("old"), 0o644))
+	plan := BuildPlan(m, res)
+	if plan.Items[0].Action != ActionReplace {
+		t.Fatalf("action %v", plan.Items[0].Action)
+	}
+
+	// Non-interactive rejection
+	rep, err := Execute(m, plan, Options{Replacer: &fakeReplacer{fsys: m}})
+	if err == nil || rep != nil || !strings.Contains(err.Error(), "interactive terminal") {
+		t.Fatalf("want non-interactive error, got %v %v", rep, err)
+	}
+	if kind(t, m, e.Target) != "file" {
+		t.Error("FS must be untouched")
+	}
+
+	// Interactive replace
+	rep, err = Execute(m, plan, Options{Prompter: &fakePrompter{decisions: []Decision{Yes}}, Replacer: &fakeReplacer{fsys: m}})
+	mustNil(t, err)
+	if rep.Replaced() != 1 || kind(t, m, e.Target) != "dir" {
+		t.Fatalf("replaced=%d kind=%s", rep.Replaced(), kind(t, m, e.Target))
+	}
+
+	// Setup conflict (invalid link)
+	e.Target = p("home", "conflict2")
+	res.Entries[0].Target = e.Target
+	mustNil(t, m.Symlink("nowhere", e.Target))
+	plan = BuildPlan(m, res)
+	if plan.Items[0].Action != ActionReplace {
+		t.Fatalf("action %v", plan.Items[0].Action)
+	}
+
+	rep, err = Execute(m, plan, Options{Prompter: &fakePrompter{decisions: []Decision{Yes}}, Replacer: &fakeReplacer{fsys: m}})
+	mustNil(t, err)
+	if rep.Replaced() != 1 || kind(t, m, e.Target) != "dir" {
+		t.Fatalf("replaced=%d kind=%s", rep.Replaced(), kind(t, m, e.Target))
+	}
+}
+
+type failMkdirFS struct {
+	fs.Manager
+}
+
+func (f failMkdirFS) MkdirAll(path string, perm os.FileMode) error {
+	if strings.HasSuffix(path, "faildir") {
+		return errors.New("mkdir fail")
+	}
+	return f.Manager.MkdirAll(path, perm)
+}
+
+func TestExecuteDirEntryMkdirAllFailure(t *testing.T) {
+	m := newFS(t)
+	e := ent("a")
+	e.Kind = model.KindDir
+	e.Target = p("home", "faildir")
+	res := &model.Resolution{Root: root(), Entries: []model.Entry{e}}
+
+	plan := BuildPlan(m, res)
+	fm := failMkdirFS{Manager: m}
+	rep, err := Execute(fm, plan, Options{})
+	var pe *PartialError
+	if !errors.As(err, &pe) || !strings.Contains(err.Error(), "mkdir fail") {
+		t.Fatalf("want PartialError with mkdir fail, got %v", err)
+	}
+	if rep == nil || rep.Failed() != 1 {
+		t.Fatalf("want failed report, got %+v", rep)
+	}
+}
