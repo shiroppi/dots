@@ -107,11 +107,3 @@ go install github.com/shiroppi/dots/cmd/dots@latest
 
 > [!IMPORTANT]
 > On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the `SeCreateSymbolicLinkPrivilege` (usually Administrator).
-
----
-
-<div align="center">
-
-If dots fits your workflow, consider giving it a star.
-
-</div>
