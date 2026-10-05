@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"golang.org/x/term"
 
 	"github.com/shiroppi/dots/internal/apply"
@@ -117,51 +116,29 @@ func (a *App) load() (*model.Resolution, error) {
 	return resolve.Resolve(a.FS, a.Env, path, cfg)
 }
 
-const rootHelp = `
-A brief, declarative, flexible dotfiles manager.
+// usageTemplate renders both the root and the subcommand help: a description,
+// the usage line, the command groups (root only) and the options. The root
+// output starts with a blank line. The "help" command belongs to no group, so
+// it never appears in the listing.
+const usageTemplate = `{{if not .HasParent}}
+{{end}}{{.Short}}
 
 Usage:
-  dots <command> [options]
-
-Core:
-  apply       Apply dotfiles
-  doctor      Check configuration and managed files
-
-Usability:
-  init        Initialize a dotfiles repository
-  restore     Restore files from backups
-  edit        Edit dots.toml with $EDITOR
-
+  {{if .HasParent}}{{.Parent.CommandPath}} {{end}}{{.Use}} [options]
+{{range $g := .Groups}}
+{{$g.Title}}
+{{range $.Commands}}{{if and (eq .GroupID $g.ID) .IsAvailableCommand}}  {{rpad .Name .NamePadding}} {{.Short}}
+{{end}}{{end}}{{end}}
 Options:
-  -h, --help      Show help
-  -v, --version   Show version
-
-Use "dots <command> --help" for more information.
-`
-
-// helpFunc prints the fixed root help, or the plain-text help of a subcommand.
-func helpFunc(root *cobra.Command) func(*cobra.Command, []string) {
-	return func(cmd *cobra.Command, _ []string) {
-		w := cmd.OutOrStdout()
-		if cmd == root {
-			fmt.Fprint(w, rootHelp)
-			return
-		}
-		fmt.Fprintf(w, "%s\n\nUsage:\n  dots %s [options]\n\nOptions:\n", cmd.Short, cmd.Use)
-		cmd.LocalFlags().VisitAll(func(f *pflag.Flag) {
-			if f.Name == "help" {
-				return
-			}
-			fmt.Fprintf(w, "  %-16s%s\n", "    --"+f.Name, f.Usage)
-		})
-		fmt.Fprintf(w, "  %-16s%s\n", "-h, --help", "Show help")
-	}
-}
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}
+{{if .HasAvailableSubCommands}}
+Use "{{.CommandPath}} <command> --help" for more information.
+{{end}}`
 
 // NewRootCmd builds the command tree.
 func NewRootCmd(app *App, version string) *cobra.Command {
 	root := &cobra.Command{
-		Use:           "dots",
+		Use:           "dots <command>",
 		Short:         "A brief, declarative, flexible dotfiles manager.",
 		Version:       version,
 		SilenceUsage:  true,
@@ -175,6 +152,10 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error { return cmd.Help() },
 	}
 	root.SetVersionTemplate("dots version {{.Version}}\n")
+	root.SetUsageTemplate(usageTemplate)
+	root.SetHelpTemplate("{{.UsageString}}")
+	root.Flags().BoolP("version", "v", false, "Show version")
+	root.Flags().BoolP("help", "h", false, "Show help")
 	root.SetOut(app.Stdout)
 	root.SetErr(app.Stderr)
 	if app.Stdin != nil {
@@ -182,10 +163,11 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 	}
 	cobra.EnableCommandSorting = false
 	root.CompletionOptions.DisableDefaultCmd = true
-	root.SetHelpFunc(helpFunc(root))
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
-	root.AddCommand(newInitCmd(app), newDoctorCmd(app), newApplyCmd(app), newRestoreCmd(app), newEditCmd(app))
+	root.AddGroup(&cobra.Group{ID: "core", Title: "Core:"}, &cobra.Group{ID: "usability", Title: "Usability:"})
+	root.AddCommand(newApplyCmd(app), newDoctorCmd(app), newInitCmd(app), newRestoreCmd(app), newEditCmd(app))
 	for _, c := range root.Commands() {
+		c.Flags().BoolP("help", "h", false, "Show help")
 		if inner := c.Args; inner != nil {
 			c.Args = func(cmd *cobra.Command, args []string) error {
 				if err := inner(cmd, args); err != nil {
@@ -232,9 +214,10 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 
 func newInitCmd(app *App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "init",
-		Short: "Initialize a dotfiles repository",
-		Args:  cobra.NoArgs,
+		Use:     "init",
+		Short:   "Initialize a dotfiles repository",
+		GroupID: "usability",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := filepath.Join(app.Env.Cwd, config.FileName)
 			f, err := app.FS.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
@@ -260,9 +243,10 @@ func newInitCmd(app *App) *cobra.Command {
 
 func newDoctorCmd(app *App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "doctor",
-		Short: "Check configuration and managed files",
-		Args:  cobra.NoArgs,
+		Use:     "doctor",
+		Short:   "Check configuration and managed files",
+		GroupID: "core",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := app.load()
 			if err != nil {
@@ -280,9 +264,10 @@ func newDoctorCmd(app *App) *cobra.Command {
 func newApplyCmd(app *App) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "apply",
-		Short: "Apply dotfiles",
-		Args:  cobra.NoArgs,
+		Use:     "apply",
+		Short:   "Apply dotfiles",
+		GroupID: "core",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := app.load()
 			if err != nil {
@@ -337,9 +322,10 @@ func newApplyCmd(app *App) *cobra.Command {
 func newRestoreCmd(app *App) *cobra.Command {
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "restore <archive>",
-		Short: "Restore files from backups",
-		Args:  cobra.ExactArgs(1),
+		Use:     "restore <archive>",
+		Short:   "Restore files from backups",
+		GroupID: "usability",
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if _, err := config.Find(app.FS, app.Env.Cwd); err != nil {
 				return err
@@ -393,9 +379,10 @@ func newRestoreCmd(app *App) *cobra.Command {
 
 func newEditCmd(app *App) *cobra.Command {
 	return &cobra.Command{
-		Use:   "edit",
-		Short: "Edit dots.toml with $EDITOR",
-		Args:  cobra.NoArgs,
+		Use:     "edit",
+		Short:   "Edit dots.toml with $EDITOR",
+		GroupID: "usability",
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path, err := config.Find(app.FS, app.Env.Cwd)
 			if err != nil {
