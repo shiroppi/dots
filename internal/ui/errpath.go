@@ -16,13 +16,20 @@ func (e *displayError) Error() string { return e.msg }
 func (e *displayError) Unwrap() error { return e.err }
 
 // joinedError is a rewritten errors.Join tree; it still unwraps to the
-// rewritten children, whose chains reach the original errors.
+// rewritten children, whose chains reach the original errors. Its message
+// joins the rewritten children with newlines, as errors.Join does.
 type joinedError struct {
-	orig error
 	kids []error
 }
 
-func (j *joinedError) Error() string   { return j.orig.Error() }
+func (j *joinedError) Error() string {
+	msgs := make([]string, len(j.kids))
+	for i, k := range j.kids {
+		msgs[i] = k.Error()
+	}
+	return strings.Join(msgs, "\n")
+}
+
 func (j *joinedError) Unwrap() []error { return j.kids }
 
 // WrapError returns err with every leaf of its errors.Join tree rewritten by
@@ -45,7 +52,7 @@ func (p *Printer) WrapError(err error) error {
 		for i, k := range kids {
 			out[i] = p.WrapError(k)
 		}
-		return &joinedError{orig: err, kids: out}
+		return &joinedError{kids: out}
 	}
 	msg := err.Error()
 	if shown := p.DisplayText(msg); shown != msg {
@@ -89,7 +96,7 @@ func rewritePaths(s, home, root, goos string) string {
 
 func isLeftBoundary(c byte) bool {
 	switch c {
-	case ' ', '\t', '"', '\'', '`', '(', '[', ':', '=', ',', ';':
+	case ' ', '\t', '\n', '"', '\'', '`', '(', '[', ':', '=', ',', ';':
 		return true
 	}
 	return false
