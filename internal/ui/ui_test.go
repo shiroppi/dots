@@ -338,3 +338,115 @@ func TestRelUnder(t *testing.T) {
 		t.Error("root itself must not match")
 	}
 }
+
+func TestHeaders(t *testing.T) {
+	home := p("home")
+	rootPath := p("home", "repo")
+	plan := &apply.Plan{}
+	rep := &apply.Report{}
+
+	var b1 bytes.Buffer
+	pr1 := &Printer{W: &b1, Home: home}
+	pr1.Doctor(plan)
+	pr1.Plan(plan)
+	pr1.Report(rep)
+	if strings.Contains(b1.String(), "Repository:") {
+		t.Errorf("header printed without Root")
+	}
+
+	var b2 bytes.Buffer
+	pr2 := &Printer{W: &b2, Home: home, Root: rootPath}
+	pr2.Doctor(plan)
+	if !strings.Contains(b2.String(), "Repository: ~"+string(filepath.Separator)+"repo\n\n") {
+		t.Errorf("Doctor header missing or incorrect")
+	}
+	b2.Reset()
+	pr2.Plan(plan)
+	if !strings.Contains(b2.String(), "Repository: ~"+string(filepath.Separator)+"repo\n\n") {
+		t.Errorf("Plan header missing or incorrect")
+	}
+	b2.Reset()
+	pr2.Report(rep)
+	if !strings.Contains(b2.String(), "Repository: ~"+string(filepath.Separator)+"repo\n\n") {
+		t.Errorf("Report header missing or incorrect")
+	}
+}
+
+func TestHeaderColorNoEscapes(t *testing.T) {
+	var b bytes.Buffer
+	pr := &Printer{W: &b, Root: p("repo"), Color: true}
+	pr.Doctor(&apply.Plan{})
+	// Only the header line is checked: the summary line is colored.
+	first := strings.SplitN(b.String(), "\n", 2)[0]
+	if !strings.HasPrefix(first, "Repository: ") || strings.Contains(first, "\x1b[") {
+		t.Errorf("header line = %q, want an uncolored Repository header", first)
+	}
+}
+
+func TestDisplaySourceScenarios(t *testing.T) {
+	home := p("home")
+	rootPath := p("home", "repo")
+	pr := &Printer{Home: home, Root: rootPath}
+
+	if got := pr.displaySource(p("home", "repo", "a")); got != "a" {
+		t.Errorf("inside: got %q", got)
+	}
+	if got := pr.displaySource(p("other")); got != p("other") {
+		t.Errorf("outside: got %q", got)
+	}
+	if got := pr.displaySource(p("home", "repo2", "a")); got != "~"+string(filepath.Separator)+"repo2"+string(filepath.Separator)+"a" {
+		t.Errorf("sibling prefix: got %q", got)
+	}
+}
+
+func TestOverridesAndDirSources(t *testing.T) {
+	plan := &apply.Plan{
+		Items: []apply.Item{
+			{Action: apply.ActionSkip, Result: state.Result{Entry: model.Entry{Target: p("d"), Kind: model.KindDir, Origin: model.Origin{Rule: "d"}}}},
+		},
+		Overrides: []model.Override{
+			{
+				Target: p("t"),
+				Winner: model.Origin{Rule: "win"},
+				Loser:  model.Entry{Source: p("repo", "lose"), Origin: model.Origin{Rule: "lose"}},
+			},
+		},
+	}
+	out := render(func(pr *Printer) {
+		pr.Root = p("repo")
+		pr.Plan(plan)
+	})
+	checkContains(t, out, "loser:  lose -> lose", "(directory)")
+	if strings.Contains(out, p("repo", "lose")) {
+		t.Errorf("loser source not relative: %q", out)
+	}
+	if strings.Contains(out, "d ->") {
+		t.Errorf("directory entry shows source: %q", out)
+	}
+}
+
+func TestRelUnderTable(t *testing.T) {
+	tests := []struct {
+		name   string
+		root   string
+		path   string
+		goos   string
+		want   string
+		wantOk bool
+	}{
+		{"inside", p("repo"), p("repo", "a"), "linux", "a", true},
+		{"equal", p("repo"), p("repo"), "linux", "", false},
+		{"sibling", p("repo"), p("repo2", "a"), "linux", "", false},
+		{"case insensitive win", p("repo"), p("REPO", "a"), "windows", "a", true},
+		{"case insensitive darwin", p("repo"), p("REPO", "a"), "darwin", "a", true},
+		{"case sensitive linux", p("repo"), p("REPO", "a"), "linux", "", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := relUnder(tc.root, tc.path, tc.goos)
+			if got != tc.want || ok != tc.wantOk {
+				t.Errorf("got %q, %v want %q, %v", got, ok, tc.want, tc.wantOk)
+			}
+		})
+	}
+}

@@ -734,3 +734,62 @@ func TestUsageErrors(t *testing.T) {
 		t.Errorf("expected no stderr for silent error, got %q", te.errOut.String())
 	}
 }
+
+func TestCLIHeadersAndRelativeSources(t *testing.T) {
+	te := setupEnv(t)
+	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.a" = "a/b"`+"\n"), 0o644)
+	te.fsys.MkdirAll(p("a"), 0o755)
+	dotsfs.WriteFile(te.fsys, p("a", "b"), []byte("content"), 0o644)
+
+	relSrc := filepath.Join("a", "b")
+
+	// Doctor
+	if c := te.run("doctor"); c != 1 {
+		t.Errorf("want 1, got %d", c)
+	}
+	out := te.out.String()
+	if !strings.Contains(out, "Repository: "+root()) {
+		t.Errorf("missing Repository header in doctor: %q", out)
+	}
+	if !strings.Contains(out, "-> "+relSrc+" ") {
+		t.Errorf("missing relative source in doctor: %q", out)
+	}
+
+	// Apply dry-run
+	if c := te.run("apply", "--dry-run"); c != 0 {
+		t.Errorf("want 0, got %d", c)
+	}
+	out = te.out.String()
+	if !strings.Contains(out, "Repository: "+root()) {
+		t.Errorf("missing Repository header in apply --dry-run: %q", out)
+	}
+	if !strings.Contains(out, "-> "+relSrc+" ") {
+		t.Errorf("missing relative source in apply --dry-run: %q", out)
+	}
+
+	// Apply report
+	if c := te.run("apply"); c != 0 {
+		t.Errorf("want 0, got %d", c)
+	}
+	out = te.out.String()
+	if !strings.Contains(out, "Repository: "+root()) {
+		t.Errorf("missing Repository header in apply: %q", out)
+	}
+	if !strings.Contains(out, "-> "+relSrc+" ") {
+		t.Errorf("missing relative source in apply: %q", out)
+	}
+
+	// Restore dry-run
+	store := &backup.Store{FS: te.fsys, Dir: te.app.BackupDir}
+	arc, err := store.Archive(p("home", ".a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := te.run("restore", arc, "--dry-run"); c != 0 {
+		t.Errorf("want 0, got %d", c)
+	}
+	out = te.out.String()
+	if strings.Contains(out, "Repository:") {
+		t.Errorf("unexpected Repository header in restore --dry-run: %q", out)
+	}
+}
