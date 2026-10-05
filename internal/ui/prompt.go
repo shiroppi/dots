@@ -77,8 +77,9 @@ func (p *Prompter) Confirm(item apply.Item) (apply.Decision, error) {
 
 // ConfirmRestore asks whether to back up the current content and restore.
 // It returns true for backup+restore.
-func ConfirmRestore(in io.Reader, out io.Writer, plan *backup.RestorePlan) (bool, error) {
-	title := fmt.Sprintf("%s already exists (%s).\nRestore %s over it?", plan.Target, plan.ExistingKind, plan.ArchivePath)
+func ConfirmRestore(in io.Reader, out io.Writer, home string, plan *backup.RestorePlan) (bool, error) {
+	title := fmt.Sprintf("%s already exists (%s).\nRestore %s over it?",
+		displayPath(home, plan.Target, hostOS), plan.ExistingKind, displayPath(home, plan.ArchivePath, hostOS))
 	choice, err := runSelect(in, out, title, []string{choiceRestore, choiceSkip})
 	if err != nil {
 		return false, err

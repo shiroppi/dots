@@ -358,7 +358,7 @@ func Main(version string) int {
 		Color:       interactive && !noColor,
 		Prompter:    &ui.Prompter{In: os.Stdin, Out: os.Stdout, Home: env.Home},
 		ConfirmRestore: func(plan *backup.RestorePlan) (bool, error) {
-			return ui.ConfirmRestore(os.Stdin, os.Stdout, plan)
+			return ui.ConfirmRestore(os.Stdin, os.Stdout, env.Home, plan)
 		},
 		RunEditor: func(argv []string) error {
 			c := exec.Command(argv[0], argv[1:]...)
