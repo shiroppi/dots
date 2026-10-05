@@ -115,13 +115,21 @@ func (a *App) store() (*backup.Store, error) {
 func (a *App) load() (*model.Resolution, error) {
 	path, err := config.Find(a.FS, a.Env.Cwd)
 	if err != nil {
-		return nil, err
+		return nil, a.printer().WrapError(err)
 	}
+	// From here on the repository root is known, so messages show sources
+	// relative to it.
+	pr := a.printer()
+	pr.Root = filepath.Dir(path)
 	cfg, err := config.Load(a.FS, path)
 	if err != nil {
-		return nil, err
+		return nil, pr.WrapError(err)
 	}
-	return resolve.Resolve(a.FS, a.Env, path, cfg)
+	res, err := resolve.Resolve(a.FS, a.Env, path, cfg)
+	if err != nil {
+		return nil, pr.WrapError(err)
+	}
+	return res, nil
 }
 
 // usageTemplate renders both the root and the subcommand help: a description,
@@ -311,11 +319,11 @@ func newApplyCmd(app *App) *cobra.Command {
 				if err != nil {
 					pr.Plan(plan)
 				}
-				return err
+				return pr.WrapError(err)
 			}
 			pr.Report(rep)
 			if err != nil {
-				return err
+				return pr.WrapError(err)
 			}
 			if rep.Created() == 0 && rep.Replaced() == 0 && rep.SkippedByUser() == 0 {
 				fmt.Fprintln(app.Stdout, "Nothing to do: everything is already linked.")
@@ -358,7 +366,7 @@ func newRestoreCmd(app *App) *cobra.Command {
 			backupExisting := false
 			if plan.Exists {
 				if !app.Interactive || app.ConfirmRestore == nil {
-					return fmt.Errorf("%s already exists and restoring over it requires an interactive terminal; run `dots restore --dry-run` to inspect (nothing was changed)", plan.Target)
+					return fmt.Errorf("%s already exists and restoring over it requires an interactive terminal; run `dots restore --dry-run` to inspect (nothing was changed)", pr.Display(plan.Target))
 				}
 				ok, err := app.ConfirmRestore(plan)
 				if err != nil {
