@@ -1,17 +1,23 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"os/signal"
+	"syscall"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 
 	"github.com/shiroppi/dots/internal/apply"
 	"github.com/shiroppi/dots/internal/backup"
 )
 
-// ErrAborted is returned when the user cancels a prompt (Ctrl-C).
+// ErrAborted is returned when a prompt ends without an answer: the user
+// cancelled it (Ctrl-C) or it was interrupted by a signal.
 var ErrAborted = errors.New("aborted by user")
 
 const (
@@ -87,26 +93,66 @@ func ConfirmRestore(in io.Reader, out io.Writer, home string, plan *backup.Resto
 	return restoreFor(choice)
 }
 
-func runSelect(in io.Reader, out io.Writer, title string, choices []string) (string, error) {
-	var choice string
+func options(choices []string) []huh.Option[string] {
 	opts := make([]huh.Option[string], len(choices))
 	for i, c := range choices {
 		opts[i] = huh.NewOption(c, c)
 	}
-	form := huh.NewForm(huh.NewGroup(
-		huh.NewSelect[string]().Title(title).Options(opts...).Value(&choice),
-	))
+	return opts
+}
+
+func runSelect(in io.Reader, out io.Writer, title string, choices []string) (string, error) {
+	var choice string
+	form := newForm(in, out, huh.NewSelect[string]().Title(title).Options(options(choices)...).Value(&choice))
+	if err := runForm(form); err != nil {
+		return "", err
+	}
+	return choice, nil
+}
+
+func newForm(in io.Reader, out io.Writer, fields ...huh.Field) *huh.Form {
+	form := huh.NewForm(huh.NewGroup(fields...))
 	if in != nil {
 		form = form.WithInput(in)
 	}
 	if out != nil {
 		form = form.WithOutput(out)
 	}
-	if err := form.Run(); err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			return "", ErrAborted
+	return form
+}
+
+// runForm runs form and returns ErrAborted unless the user submitted it.
+// SIGHUP is not handled by bubbletea, so it is turned into a cancellation of
+// the form here instead of killing the process mid-prompt.
+func runForm(form *huh.Form) error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGHUP)
+	defer signal.Stop(sig)
+	go func() {
+		select {
+		case <-sig:
+			cancel()
+		case <-ctx.Done():
 		}
-		return "", err
+	}()
+	return formResult(form.State, form.RunWithContext(ctx))
+}
+
+// formResult decides the outcome of a finished form. huh returns nil from
+// Run when bubbletea quit without the user submitting (SIGTERM), and wraps
+// tea.ErrInterrupted (SIGINT without a raw-mode terminal), so only a
+// completed form counts as an answer.
+func formResult(state huh.FormState, err error) error {
+	switch {
+	case err == nil:
+		if state != huh.StateCompleted {
+			return ErrAborted
+		}
+		return nil
+	case errors.Is(err, huh.ErrUserAborted), errors.Is(err, huh.ErrTimeout), errors.Is(err, tea.ErrInterrupted):
+		return ErrAborted
 	}
-	return choice, nil
+	return err
 }
