@@ -112,8 +112,6 @@ go install github.com/shiroppi/dots/cmd/dots@latest
 
 <div align="center">
 
-Made with by [shiroppi](https://github.com/shiroppi).
-
-If you find this project useful, consider giving it a ⭐!
+If dots fits your workflow, consider giving it a star.
 
 </div>
