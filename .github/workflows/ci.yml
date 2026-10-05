@@ -1,0 +1,155 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  GOFLAGS: -mod=readonly
+
+jobs:
+  quality:
+    name: Quality (fmt, vet, tidy, lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"; echo "$unformatted"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go mod tidy (no diff)
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: go mod verify
+        run: go mod verify
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Test
+        run: go test -race -cover ./...
+
+      - name: Build dots
+        shell: bash
+        run: |
+          ext=""
+          if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
+          go build -trimpath -ldflags "-X main.version=ci-${GITHUB_SHA::7}" -o "$RUNNER_TEMP/dots${ext}" ./cmd/dots
+
+      - name: Smoke E2E
+        shell: bash
+        run: |
+          ext=""
+          if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
+          bash .github/scripts/smoke.sh "$RUNNER_TEMP/dots${ext}"
+
+  test-min-go:
+    name: Test (minimum Go 1.21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Never auto-upgrade: the point is to compile with the oldest supported Go.
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go (minimum supported)
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.21'
+
+      - name: Test
+        run: go test ./...
+
+  cross-compile:
+    name: Cross-compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [ quality, test ]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Build all targets
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          targets="
+          windows/amd64
+          windows/arm64
+          darwin/amd64
+          darwin/arm64
+          linux/amd64
+          linux/arm64
+          linux/riscv64
+          linux/386
+          linux/arm
+          freebsd/amd64
+          freebsd/arm64
+          freebsd/riscv64
+          openbsd/amd64
+          netbsd/amd64
+          "
+          mkdir -p dist
+          for t in $targets; do
+            os="${t%/*}"; arch="${t#*/}"
+            ext=""; if [ "$os" = "windows" ]; then ext=".exe"; fi
+            echo "::group::$os/$arch"
+            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w" -o "dist/dots-${os}-${arch}${ext}" ./cmd/dots
+            echo "::endgroup::"
+          done
+          ls -l dist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dots-binaries
+          path: dist/
+          retention-days: 7
