@@ -336,7 +336,7 @@ func (s *Store) addEntry(tw *tar.Writer, src, name string, info fs.FileInfo) err
 			return err
 		}
 		_, cerr := io.CopyN(tw, f, hdr.Size)
-		f.Close()
+		_ = f.Close() // read-only: close error is not actionable
 		return cerr
 	}
 	return fmt.Errorf("%w: %s (mode %s)", ErrUnsupportedType, src, mode.Type())

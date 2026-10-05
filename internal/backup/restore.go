@@ -97,7 +97,7 @@ func scan(fsys fs.Manager, archivePath string,
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // read-only: close error is not actionable
 	gz, err := gzip.NewReader(f)
 	if err != nil {
 		return nil, invalidf("not a gzip file: %v", err)

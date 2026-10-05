@@ -191,8 +191,12 @@ func TestConfigDiscoveryAndMissing(t *testing.T) {
 	if !strings.Contains(te.errOut.String(), "not found") {
 		t.Errorf("want 'not found', got %q", te.errOut.String())
 	}
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644)
-	te.fsys.MkdirAll(p("sub", "dir"), 0o755)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := te.fsys.MkdirAll(p("sub", "dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	te.app.Env.Cwd = p("sub", "dir")
 	code = te.run("doctor")
 	if code != 0 {
@@ -208,10 +212,18 @@ func TestDoctor(t *testing.T) {
 [dots.%s]
 "~/.b" = "b2"
 `, runtime.GOOS)
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644)
-	dotsfs.WriteFile(te.fsys, p("a"), []byte("a"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("b"), []byte("b"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("b2"), []byte("b2"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("a"), []byte("a"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("b"), []byte("b"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("b2"), []byte("b2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	snapBefore := snap(te.fsys, p())
 	code := te.run("doctor")
@@ -237,7 +249,9 @@ func TestDoctor(t *testing.T) {
 		t.Errorf("want 0, got %d", c)
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"/etc/x" = "x"`), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"/etc/x" = "x"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	code = te.run("doctor")
 	if code != 1 {
 		t.Errorf("want 1, got %d", code)
@@ -249,13 +263,19 @@ func TestDoctor(t *testing.T) {
 
 func TestApply(t *testing.T) {
 	te := setupEnv(t)
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if c := te.run("apply"); c != 0 || !strings.Contains(te.out.String(), "Nothing to do") {
 		t.Errorf("empty config apply failed: %d, %q", c, te.out.String())
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.a" = "a"`+"\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("a"), []byte("a_content"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.a" = "a"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("a"), []byte("a_content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("apply failed: %d", c)
@@ -273,9 +293,15 @@ func TestApply(t *testing.T) {
 		t.Errorf("idempotent apply failed: %d, %q", c, te.out.String())
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.b" = "b"`+"\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("b"), []byte("b_content"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", ".b"), []byte("conflict"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.b" = "b"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("b"), []byte("b_content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".b"), []byte("conflict"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	snapBefore := snap(te.fsys, p())
 	if c := te.run("apply", "--dry-run"); c != 0 {
@@ -285,12 +311,16 @@ func TestApply(t *testing.T) {
 		t.Errorf("dry-run modified fs")
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.c" = "missing"`+"\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.c" = "missing"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if c := te.run("apply", "--dry-run"); c != 1 {
 		t.Errorf("want 1, got %d", c)
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.b" = "b"`+"\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.b" = "b"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	if c := te.run("apply"); c != 1 {
 		t.Errorf("want 1, got %d", c)
@@ -311,9 +341,15 @@ func TestApply(t *testing.T) {
 		t.Errorf("backup not created")
 	}
 
-	dotsfs.WriteFile(te.fsys, p("home", ".c"), []byte("conflict"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("c"), []byte("c_content"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.c" = "c"`+"\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".c"), []byte("conflict"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("c"), []byte("c_content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.c" = "c"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	prompter.decisions = []apply.Decision{apply.No}
 	if c := te.run("apply"); c != 0 {
@@ -323,25 +359,41 @@ func TestApply(t *testing.T) {
 		t.Errorf("expected skipped message")
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.d" = "c"`+"\n"+`"~/.e" = "c"`+"\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", ".d"), []byte("conflict"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", ".e"), []byte("conflict"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.d" = "c"`+"\n"+`"~/.e" = "c"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".d"), []byte("conflict"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".e"), []byte("conflict"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	prompter.decisions = []apply.Decision{apply.YesToAll}
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("want 0, got %d", c)
 	}
 
-	dotsfs.WriteFile(te.fsys, p("home", ".d"), []byte("conflict2"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", ".e"), []byte("conflict2"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".d"), []byte("conflict2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".e"), []byte("conflict2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	prompter.decisions = []apply.Decision{apply.NoToAll}
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("want 0, got %d", c)
 	}
 
-	te.fsys.RemoveAll(p("home", ".d"))
-	dotsfs.WriteFile(te.fsys, p("home", ".d"), []byte("conflict3"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.d" = "c"`+"\n"), 0o644)
+	if err := te.fsys.RemoveAll(p("home", ".d")); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".d"), []byte("conflict3"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.d" = "c"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	prompter.err = errors.New("abort")
 	if c := te.run("apply"); c != 1 {
 		t.Errorf("want 1, got %d", c)
@@ -357,7 +409,9 @@ func TestApply(t *testing.T) {
 		t.Errorf("expected warning, got %q", te.out.String())
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.f" = "a"`+"\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.f" = "a"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	te.fsys.symlinkFail[p("home", ".f")] = errors.New("symlink fail")
 	if c := te.run("apply"); c != 1 {
 		t.Errorf("want 1 for symlink fail, got %d", c)
@@ -368,7 +422,9 @@ func TestApply(t *testing.T) {
 
 	te.app.Env.Vars = map[string]string{}
 	te.app.BackupDir = ""
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.g" = "a"`+"\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.g" = "a"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("want 0 with no backup dir on no-conflict apply, got %d", c)
 	}
@@ -380,8 +436,12 @@ func TestApply(t *testing.T) {
 	te.app.BackupDir = p("backup")
 	prompter.called = false
 	prompter.decisions = []apply.Decision{apply.Yes}
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.h" = "a"`+"\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", ".h"), []byte("conflict4"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.h" = "a"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", ".h"), []byte("conflict4"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	archivesBefore, _ := te.fsys.ReadDir(p("backup"))
 	if c := te.run("apply"); c != 1 {
 		t.Errorf("want 1 for non-interactive conflict, got %d", c)
@@ -403,15 +463,21 @@ func TestRestore(t *testing.T) {
 		t.Errorf("want 1, got %d", c)
 	}
 
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", "r"), []byte("original"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", "r"), []byte("original"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	store := &backup.Store{FS: te.fsys, Dir: te.app.BackupDir}
 	arc, err := store.Archive(p("home", "r"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	te.fsys.RemoveAll(p("home", "r"))
+	if err := te.fsys.RemoveAll(p("home", "r")); err != nil {
+		t.Fatal(err)
+	}
 
 	snapBefore := snap(te.fsys, p())
 	if c := te.run("restore", arc, "--dry-run"); c != 0 {
@@ -450,7 +516,9 @@ func TestRestore(t *testing.T) {
 	}
 
 	confirmRestoreValue = true
-	dotsfs.WriteFile(te.fsys, p("home", "r"), []byte("changed"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("home", "r"), []byte("changed"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	te.out.Reset()
 	if c := te.run("restore", arc); c != 0 {
 		t.Errorf("want 0, got %d", c)
@@ -468,7 +536,9 @@ func TestRestore(t *testing.T) {
 		t.Errorf("want 0 for relative arc, got %d", c)
 	}
 
-	dotsfs.WriteFile(te.fsys, p("corrupt.tar.gz"), []byte("bad"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("corrupt.tar.gz"), []byte("bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if c := te.run("restore", p("corrupt.tar.gz")); c != 1 {
 		t.Errorf("want 1, got %d", c)
 	}
@@ -483,8 +553,12 @@ func TestRestore(t *testing.T) {
 		confirmRestoreCalled = true
 		return true, nil
 	}
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("home", "r"), []byte("conflict_restore"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("home", "r"), []byte("conflict_restore"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if c := te.run("restore", arc); c != 1 {
 		t.Errorf("want 1 for non-interactive restore conflict, got %d", c)
 	}
@@ -498,7 +572,9 @@ func TestRestore(t *testing.T) {
 
 func TestEdit(t *testing.T) {
 	te := setupEnv(t)
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	te.app.Env.Vars["EDITOR"] = "myedit --wait"
 	if c := te.run("edit"); c != 0 {
 		t.Errorf("want 0, got %d", c)
@@ -546,8 +622,12 @@ func TestExitCodeFunction(t *testing.T) {
 func TestAutoDirIgnored(t *testing.T) {
 	te := setupEnv(t)
 	// Create an auto source that only has ignored files.
-	te.fsys.MkdirAll(p("auto-src", "ign"), 0o755)
-	dotsfs.WriteFile(te.fsys, p("auto-src", "ign", "ignored.txt"), []byte("ign"), 0o644)
+	if err := te.fsys.MkdirAll(p("auto-src", "ign"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("auto-src", "ign", "ignored.txt"), []byte("ign"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	toml := `
 [[auto]]
@@ -555,7 +635,9 @@ source = "auto-src"
 target = "~/.cfg"
 ignore = ["**/*.txt"]
 `
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	// dry-run apply
 	if c := te.run("apply", "--dry-run"); c != 0 {
@@ -654,7 +736,7 @@ func TestHelp(t *testing.T) {
 	idx3 := strings.Index(out, "init")
 	idx4 := strings.Index(out, "restore")
 	idx5 := strings.Index(out, "edit")
-	if !(idx1 < idx2 && idx2 < idx3 && idx3 < idx4 && idx4 < idx5) {
+	if idx1 >= idx2 || idx2 >= idx3 || idx3 >= idx4 || idx4 >= idx5 {
 		t.Errorf("wrong command order in root help")
 	}
 
@@ -710,7 +792,9 @@ func TestUsageErrors(t *testing.T) {
 	}
 
 	te.app.Env.Cwd = p("empty")
-	te.fsys.MkdirAll(p("empty"), 0o755)
+	if err := te.fsys.MkdirAll(p("empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if code := te.run("doctor"); code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
@@ -723,8 +807,12 @@ func TestUsageErrors(t *testing.T) {
 	}
 
 	te.app.Env.Cwd = root()
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n\"~/.x\" = \"x\"\n"), 0o644)
-	dotsfs.WriteFile(te.fsys, p("x"), []byte("x"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n\"~/.x\" = \"x\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("x"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	te.out.Reset()
 	te.errOut.Reset()
 	if code := te.run("doctor"); code != 1 {
@@ -737,9 +825,15 @@ func TestUsageErrors(t *testing.T) {
 
 func TestCLIHeadersAndRelativeSources(t *testing.T) {
 	te := setupEnv(t)
-	dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.a" = "a/b"`+"\n"), 0o644)
-	te.fsys.MkdirAll(p("a"), 0o755)
-	dotsfs.WriteFile(te.fsys, p("a", "b"), []byte("content"), 0o644)
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.a" = "a/b"`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := te.fsys.MkdirAll(p("a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("a", "b"), []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	relSrc := filepath.Join("a", "b")
 

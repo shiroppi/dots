@@ -682,7 +682,7 @@ func TestArchiveContentSafety(t *testing.T) {
 	}
 	for _, it := range items[1:] {
 		n := it.hdr.Name
-		if !(n == "payload" || strings.HasPrefix(n, "payload/")) {
+		if n != "payload" && !strings.HasPrefix(n, "payload/") {
 			t.Errorf("entry outside payload: %q", n)
 		}
 		if strings.HasPrefix(n, "/") || strings.Contains(n, "..") || strings.Contains(n, `\`) || strings.Contains(n, ":") {

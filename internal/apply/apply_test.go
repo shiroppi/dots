@@ -93,9 +93,8 @@ func (f *fakePrompter) Confirm(it Item) (Decision, error) {
 
 // fakeReplacer mimics backup.Store.Replace on the in-memory FS.
 type fakeReplacer struct {
-	fsys      fs.Manager
-	replaced  []string
-	failPlace bool
+	fsys     fs.Manager
+	replaced []string
 }
 
 func (f *fakeReplacer) Replace(target string, place func() error) (string, error) {

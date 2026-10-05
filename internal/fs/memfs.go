@@ -232,7 +232,7 @@ func (m *memManager) Create(name string) (File, error) {
 
 func (m *memManager) OpenFile(name string, flag int, perm FileMode) (File, error) {
 	p := clean(name)
-	fi, err := m.b.Lstat(p)
+	_, err := m.b.Lstat(p)
 	exists := err == nil
 	if exists && flag&os.O_CREATE != 0 && flag&os.O_EXCL != 0 {
 		return nil, pathErr("open", name, ErrExist)
@@ -243,7 +243,7 @@ func (m *memManager) OpenFile(name string, flag int, perm FileMode) (File, error
 			return nil, pathErr("open", name, err)
 		}
 		p = r
-		fi, _ = m.b.Lstat(p)
+		fi, _ := m.b.Lstat(p)
 		if fi.IsDir() && flag&(os.O_WRONLY|os.O_RDWR) != 0 {
 			return nil, pathErr("open", name, errors.New("is a directory"))
 		}
@@ -323,11 +323,11 @@ func (m *memManager) copyTree(from, to string) error {
 		}
 		dst, err := m.b.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fi.Mode().Perm())
 		if err != nil {
-			src.Close()
+			_ = src.Close() // read-only
 			return err
 		}
 		_, cerr := io.Copy(dst, src)
-		src.Close()
+		_ = src.Close() // read-only
 		if err := dst.Close(); cerr == nil {
 			cerr = err
 		}
