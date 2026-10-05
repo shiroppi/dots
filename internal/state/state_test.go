@@ -332,3 +332,43 @@ func TestEvaluateRealOS(t *testing.T) {
 		t.Fatalf("broken: %s %v", r.Status, r.Err)
 	}
 }
+
+func TestResolveLinkText(t *testing.T) {
+	tests := []struct {
+		name   string
+		target string
+		text   string
+		want   string
+	}{
+		{
+			name:   "relative text",
+			target: p("a", "b", "c"),
+			text:   filepath.Join("..", "x"),
+			want:   p("a", "x"),
+		},
+		{
+			name:   "absolute text",
+			target: p("a", "b", "c"),
+			text:   p("x", "y", "z"),
+			want:   p("x", "y", "z"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveLinkText(tt.target, tt.text)
+			if got != tt.want {
+				t.Errorf("got %q want %q", got, tt.want)
+			}
+		})
+	}
+
+	if runtime.GOOS == "windows" {
+		t.Run("windows root relative", func(t *testing.T) {
+			got := resolveLinkText(`C:\a\b`, `\x\y`)
+			want := `C:\x\y`
+			if got != want {
+				t.Errorf("got %q want %q", got, want)
+			}
+		})
+	}
+}
