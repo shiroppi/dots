@@ -87,8 +87,14 @@ jobs:
           bash .github/scripts/smoke.sh "$RUNNER_TEMP/dots${ext}"
 
   test-min-go:
-    name: Test (minimum Go 1.21)
-    runs-on: ubuntu-latest
+    name: Test (minimum Go 1.22, ${{ matrix.os }})
+    # macOS is included because binaries linked by older Go releases fail to
+    # start on recent macOS (dyld: missing LC_UUID load command).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     env:
       # Never auto-upgrade: the point is to compile with the oldest supported Go.
@@ -99,10 +105,15 @@ jobs:
       - name: Set up Go (minimum supported)
         uses: actions/setup-go@v7
         with:
-          go-version: '1.21'
+          go-version: '1.22'
 
       - name: Test
         run: go test ./...
+
+      - name: Smoke test (real binary)
+        run: |
+          go build -o "$RUNNER_TEMP/dots" ./cmd/dots
+          bash .github/scripts/smoke.sh "$RUNNER_TEMP/dots"
 
   cross-compile:
     name: Cross-compile
