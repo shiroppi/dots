@@ -243,8 +243,11 @@ func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.La
 	}
 	w := &walker{fsys: fsys, rule: rule, layer: layer, sourceRoot: sourceRoot, targetRoot: targetRoot, ign: r.Ignore}
 	if n := w.walk(""); n == 0 && len(w.errs) == 0 {
-		// Not physically empty but everything was ignored.
-		w.emitDir("")
+		// Not physically empty but nothing survived (ignore / os_only). A base
+		// target (~ or .) must not become a managed directory: contribute nothing.
+		if !r.Target.IsBase() {
+			w.emitDir("")
+		}
 	}
 	return w.out, w.errs
 }
