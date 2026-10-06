@@ -306,3 +306,7 @@ apply、apply --dry-run、doctorの各項目は、状態または操作を表す
 fs.Managerを通じてOSアクセスを差し替え、memfsを用いてパス解決、状態評価、優先順位、ignore、バックアップ計画の単体検証を行う。memfsは実OSのシンボリックリンク権限・Windowsのボリューム制約を再現しないため、Windows、macOS、Linux、FreeBSD、OpenBSD上でOS固有のリンク動作も確認する。
 
 CIでは、実バイナリによるE2E（smoke.sh）を5つのOS（Linux、macOS、Windows、FreeBSD、OpenBSD）で実行する。FreeBSDとOpenBSDはGitHub Actions上のVMで動かし、他のジョブの成否には影響させない。確認プロンプトを伴う競合時の置き換え、restore、Ctrl-Cによる中断（終了コード130）は、LinuxとmacOSでexpectが擬似端末を操作して確認する。
+
+## 10. リリース
+
+`vX.Y.Z` 形式のタグをpushすると、GitHub ActionsのGoReleaserが、CIのクロスコンパイルと同じ15ターゲット（OSとアーキテクチャの組）向けのアーカイブ（Windowsはzip、その他はtar.gz）とチェックサム（checksums.txt）を含むGitHub Releaseを公開する。
