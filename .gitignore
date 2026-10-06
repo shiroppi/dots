@@ -38,3 +38,9 @@ CLAUDE.md
 
 # GoReleaser output
 dist/
+
+# makepkg output (when run at the repo root)
+/src/
+/pkg/
+*.pkg.tar.*
+/dots-*.tar.gz

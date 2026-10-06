@@ -1,0 +1,1 @@
+docs/aur/dots/PKGBUILD
