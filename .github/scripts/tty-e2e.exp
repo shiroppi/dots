@@ -1,0 +1,41 @@
+#!/usr/bin/expect -f
+# Drive one interactive dots command through a pty.
+# Usage: tty-e2e.exp <steps> <command> [args...]
+#   steps: Tcl list of {pattern key} pairs (flat). For each pair, wait for the
+#          regexp, pause briefly, then send the key ("\r" = Enter, "\003" =
+#          Ctrl-C). After the last step, wait for the process to exit.
+# Everything the program prints goes to stdout; the exit status is the
+# program's own. Exit 99 means a pattern never appeared (timeout).
+set timeout 20
+set steps [lindex $argv 0]
+set cmd [lrange $argv 1 end]
+
+spawn -noecho {*}$cmd
+# Wide pty so prompt titles do not wrap in the middle of a pattern.
+catch { stty columns 200 rows 50 < $spawn_out(slave,name) }
+
+foreach {pattern key} $steps {
+    expect {
+        -re $pattern {}
+        timeout {
+            puts "\n\[tty-e2e\] TIMEOUT waiting for /$pattern/"
+            exit 99
+        }
+        eof {
+            puts "\n\[tty-e2e\] process exited while waiting for /$pattern/"
+            exit 98
+        }
+    }
+    sleep 0.5
+    send -- [subst -nocommands -novariables $key]
+}
+
+expect {
+    eof {}
+    timeout {
+        puts "\n\[tty-e2e\] TIMEOUT waiting for exit"
+        exit 99
+    }
+}
+lassign [wait] pid spawnid os_error value
+exit $value
