@@ -16,7 +16,7 @@ GNU Stow のようにリポジトリ構造と配置先が固定される方式�
 
 1. 短く直感的な宣言型設定
 2. dotfilesリポジトリ構造の柔軟性
-3. Windows、macOS、Linux、FreeBSDのサポート
+3. Windows、macOS、Linux、FreeBSD、OpenBSDのサポート
 4. 分かりやすく、見やすいCLI体験
 
 ### v0.1.0 の非目標
@@ -77,7 +77,7 @@ target の設定文字列には絶対パスを許可しない。Unix形式の / 
 
 ## 5. 設定ファイルのスキーマ
 
-2種類の記法をサポートする。OS名は Go の実行環境名を使う。v0.1.0で特別に扱うOS名は darwin、windows、linux、freebsd とする。
+2種類の記法をサポートする。OS名は Go の実行環境名を使う。v0.1.0で特別に扱うOS名は darwin、windows、linux、freebsd、openbsd とする。
 
 ### 5.1 フラット記法
 
@@ -135,7 +135,7 @@ os_only は [[auto.<os>]] ルールだけに指定できる省略可能な真偽
     target = "~/.config"
     os_only = true
 
-この例では、darwinでは auto.darwin だけが config/darwin を展開し、~/.config/karabiner/... を作る（~/.config/darwin/... は作らない）。linux、windows、freebsd では config/darwin 配下を何も配置しない。
+この例では、darwinでは auto.darwin だけが config/darwin を展開し、~/.config/karabiner/... を作る（~/.config/darwin/... は作らない）。linux、windows、freebsd、openbsd では config/darwin 配下を何も配置しない。
 
 - 除外対象を集めるため、実行中でないOSの [[auto.<os>]] も os_only のsourceだけは読む。それ以外の用途では、実行中でないOSのルールは従来どおり無視する。
 - 除外は共通の [[auto]] ルールにだけ適用する。他の auto.<os> ルールや、dots・dots.<os> のエントリには影響しない。dots がこのsource配下を明示的に指していても、そのまま配置する。
@@ -236,7 +236,7 @@ applyは正規化したターゲットパスの辞書順でPlanを処理する�
 
 保存先:
 
-- Linux、FreeBSDなど: 有効なXDG_DATA_HOME/dots/backups。XDG_DATA_HOMEが未設定または空なら~/.local/share/dots/backups。設定されているが絶対パスでない場合はエラーにする。
+- Linux、FreeBSD、OpenBSDなど: 有効なXDG_DATA_HOME/dots/backups。XDG_DATA_HOMEが未設定または空なら~/.local/share/dots/backups。設定されているが絶対パスでない場合はエラーにする。
 - macOS: ~/Library/Application Support/dots/backups
 - Windows: %LOCALAPPDATA%\dots\backups
 
@@ -303,4 +303,4 @@ apply、apply --dry-run、doctorの各項目は、状態または操作を表す
 
 ## 9. テスト方針
 
-fs.Managerを通じてOSアクセスを差し替え、memfsを用いてパス解決、状態評価、優先順位、ignore、バックアップ計画の単体検証を行う。memfsは実OSのシンボリックリンク権限・Windowsのボリューム制約を再現しないため、Windows、macOS、Linux、FreeBSD上でOS固有のリンク動作も確認する。
+fs.Managerを通じてOSアクセスを差し替え、memfsを用いてパス解決、状態評価、優先順位、ignore、バックアップ計画の単体検証を行う。memfsは実OSのシンボリックリンク権限・Windowsのボリューム制約を再現しないため、Windows、macOS、Linux、FreeBSD、OpenBSD上でOS固有のリンク動作も確認する。

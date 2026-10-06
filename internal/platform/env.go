@@ -11,7 +11,7 @@ import (
 // Env is an injectable snapshot of the process environment.
 type Env struct {
 	// GOOS is the Go runtime OS name (runtime.GOOS), e.g. "darwin",
-	// "windows", "linux", "freebsd".
+	// "windows", "linux", "freebsd", "openbsd".
 	GOOS string
 	// Home is the absolute home directory of the current user.
 	Home string
