@@ -193,7 +193,7 @@ func TestResolveSource(t *testing.T) {
 
 func TestFoldsCase(t *testing.T) {
 	for goos, want := range map[string]bool{
-		"windows": true, "darwin": true, "linux": false, "freebsd": false, "": false,
+		"windows": true, "darwin": true, "linux": false, "freebsd": false, "openbsd": false, "": false,
 	} {
 		if got := FoldsCase(goos); got != want {
 			t.Errorf("FoldsCase(%q)=%v want %v", goos, got, want)
@@ -212,6 +212,7 @@ func TestKey(t *testing.T) {
 		{"darwin lowers", "darwin", filepath.Join("A", "Bc"), filepath.Join("a", "bc")},
 		{"linux keeps", "linux", filepath.Join("A", "Bc"), filepath.Join("A", "Bc")},
 		{"freebsd keeps", "freebsd", filepath.Join("A", "Bc"), filepath.Join("A", "Bc")},
+		{"openbsd keeps", "openbsd", filepath.Join("A", "Bc"), filepath.Join("A", "Bc")},
 		{"cleans", "linux", filepath.FromSlash("a/./b/../c/"), filepath.Join("a", "c")},
 	}
 	for _, tc := range tests {

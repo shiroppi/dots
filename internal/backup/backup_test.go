@@ -255,6 +255,8 @@ func TestDefaultDir(t *testing.T) {
 		{"linux xdg relative", platform.Env{GOOS: "linux", Home: home, Vars: map[string]string{"XDG_DATA_HOME": rel}}, "", true},
 		{"freebsd xdg", platform.Env{GOOS: "freebsd", Home: home, Vars: map[string]string{"XDG_DATA_HOME": abs}}, filepath.Join(abs, "dots", "backups"), false},
 		{"freebsd fallback", platform.Env{GOOS: "freebsd", Home: home}, filepath.Join(home, ".local", "share", "dots", "backups"), false},
+		{"openbsd xdg", platform.Env{GOOS: "openbsd", Home: home, Vars: map[string]string{"XDG_DATA_HOME": abs}}, filepath.Join(abs, "dots", "backups"), false},
+		{"openbsd fallback", platform.Env{GOOS: "openbsd", Home: home}, filepath.Join(home, ".local", "share", "dots", "backups"), false},
 		{"linux no home no xdg", platform.Env{GOOS: "linux"}, "", true},
 	}
 	for _, tc := range tests {

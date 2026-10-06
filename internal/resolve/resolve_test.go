@@ -139,7 +139,7 @@ func TestFlatDuplicateSpellings(t *testing.T) {
 func TestCaseFolding(t *testing.T) {
 	m := build(t, tree{files: []string{"a", "b"}})
 	toml := "[dots]\n\"~/.Vimrc\" = \"a\"\n\"~/.vimrc\" = \"b\"\n"
-	for goos, wantErr := range map[string]bool{"windows": true, "darwin": true, "linux": false, "freebsd": false} {
+	for goos, wantErr := range map[string]bool{"windows": true, "darwin": true, "linux": false, "freebsd": false, "openbsd": false} {
 		_, err := run(t, m, goos, toml)
 		if (err != nil) != wantErr {
 			t.Errorf("%s: err=%v wantErr=%v", goos, err, wantErr)

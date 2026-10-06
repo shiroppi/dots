@@ -39,6 +39,11 @@ os_only = true
 	eq(t, summary(res), []string{
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
+	res, err = run(t, m, "openbsd", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+	})
 
 	// Without os_only
 	tomlNoOSOnly := `
@@ -81,6 +86,11 @@ os_only = true
 	eq(t, summary(res), []string{
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
+	res, err = run(t, m, "openbsd", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+	})
 }
 
 func TestOSOnlyOutsideCommonSource(t *testing.T) {
@@ -101,6 +111,11 @@ target = "~/.config"
 os_only = true
 `
 	res, err := run(t, m, "linux", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+	})
+	res, err = run(t, m, "openbsd", toml)
 	must(t, err)
 	eq(t, summary(res), []string{
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
@@ -135,6 +150,11 @@ os_only = true
 	eq(t, summary(res), []string{
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
+	res, err = run(t, m, "openbsd", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+	})
 }
 
 func TestOSOnlyEqualToCommon(t *testing.T) {
@@ -158,6 +178,12 @@ os_only = true
 	// For linux, auto[0] is completely excluded, so we get a single real-directory entry for target root
 	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindDir || res.Entries[0].Target != h(".config") {
 		t.Fatalf("expected real directory for excluded root, got: %v", summary(res))
+	}
+	res, err = run(t, m, "openbsd", toml)
+	must(t, err)
+	// For openbsd, auto[0] is completely excluded, so we get a single real-directory entry for target root
+	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindDir || res.Entries[0].Target != h(".config") {
+		t.Fatalf("expected real directory for excluded root on openbsd, got: %v", summary(res))
 	}
 }
 
@@ -189,6 +215,16 @@ os_only = true
 	if res.Entries[0].Kind != model.KindDir {
 		t.Errorf("expected config/os to be KindDir, got %v", res.Entries[0].Kind)
 	}
+	res, err = run(t, m, "openbsd", toml)
+	must(t, err)
+	// config/os is emptied by the exclusion of config/os/darwin, so it becomes a KindDir
+	eq(t, summary(res), []string{
+		`home/.config/os<-config/os[auto[0]]`,
+		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+	})
+	if res.Entries[0].Kind != model.KindDir {
+		t.Errorf("expected config/os to be KindDir on openbsd, got %v", res.Entries[0].Kind)
+	}
 }
 
 func TestOSOnlyDotsInsideResolves(t *testing.T) {
@@ -212,6 +248,12 @@ target = "~/.config"
 os_only = true
 `
 	res, err := run(t, m, "linux", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config/karabiner.json<-config/darwin/karabiner.json[dots."~/.config/karabiner.json"]`,
+		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+	})
+	res, err = run(t, m, "openbsd", toml)
 	must(t, err)
 	eq(t, summary(res), []string{
 		`home/.config/karabiner.json<-config/darwin/karabiner.json[dots."~/.config/karabiner.json"]`,
@@ -333,6 +375,12 @@ os_only = true
 	must(t, err)
 	if len(res.Entries) != 0 {
 		t.Errorf("expected no entries on linux, got: %v", summary(res))
+	}
+	// On openbsd, common is excluded, yielding no entries. auto.darwin doesn't run.
+	res, err = run(t, m, "openbsd", toml)
+	must(t, err)
+	if len(res.Entries) != 0 {
+		t.Errorf("expected no entries on openbsd, got: %v", summary(res))
 	}
 
 	// On darwin, common is excluded, yielding no entries. auto.darwin deploys "home" to "~/.config".
