@@ -7,7 +7,6 @@
 #      with the real sha256 of the tag tarball.
 #   4. Run `makepkg --printsrcinfo > .SRCINFO` and push PKGBUILD + .SRCINFO to
 #      the AUR git repository.
-# The repo-root PKGBUILD is a symlink to this file.
 
 pkgname=dots
 pkgver=0.1.0
