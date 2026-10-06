@@ -174,10 +174,29 @@ jobs:
           bash .github/scripts/smoke.sh "$RUNNER_TEMP/dots"
 
   cross-compile:
-    name: Cross-compile
+    name: Build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     needs: [ quality, test ]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: windows, goarch: amd64 }
+          - { goos: windows, goarch: arm64 }
+          - { goos: darwin, goarch: amd64 }
+          - { goos: darwin, goarch: arm64 }
+          - { goos: linux, goarch: amd64 }
+          - { goos: linux, goarch: arm64 }
+          - { goos: linux, goarch: riscv64 }
+          - { goos: linux, goarch: 386 }
+          - { goos: linux, goarch: arm }
+          - { goos: freebsd, goarch: amd64 }
+          - { goos: freebsd, goarch: arm64 }
+          - { goos: freebsd, goarch: riscv64 }
+          - { goos: openbsd, goarch: amd64 }
+          - { goos: openbsd, goarch: arm64 }
+          - { goos: openbsd, goarch: riscv64 }
     steps:
       - uses: actions/checkout@v7
 
@@ -186,40 +205,20 @@ jobs:
         with:
           go-version: stable
 
-      - name: Build all targets
+      - name: Build
         env:
           CGO_ENABLED: '0'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
         run: |
-          targets="
-          windows/amd64
-          windows/arm64
-          darwin/amd64
-          darwin/arm64
-          linux/amd64
-          linux/arm64
-          linux/riscv64
-          linux/386
-          linux/arm
-          freebsd/amd64
-          freebsd/arm64
-          freebsd/riscv64
-          openbsd/amd64
-          openbsd/arm64
-          openbsd/riscv64
-          "
+          ext=""; if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           mkdir -p dist
-          for t in $targets; do
-            os="${t%/*}"; arch="${t#*/}"
-            ext=""; if [ "$os" = "windows" ]; then ext=".exe"; fi
-            echo "::group::$os/$arch"
-            GOOS="$os" GOARCH="$arch" go build -trimpath -ldflags "-s -w" -o "dist/dots-${os}-${arch}${ext}" ./cmd/dots
-            echo "::endgroup::"
-          done
+          go build -trimpath -ldflags "-s -w" -o "dist/dots-${GOOS}-${GOARCH}${ext}" ./cmd/dots
           ls -l dist
 
-      - name: Upload artifacts
+      - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: dots-binaries
+          name: dots-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
           retention-days: 7
