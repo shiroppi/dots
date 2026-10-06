@@ -1,5 +1,5 @@
 <div align="center">
-    <img src="docs/icon.png" alt="dots logo" width="256" height="256">
+    <img src="docs/icon_512x512.webp" alt="dots logo" width="256" height="256">
     <h1>dots</h1>
 </div>
 
@@ -16,7 +16,7 @@ A small, declarative dotfiles manager for people who want their configuration to
 
 - Brief, declarative configuration
 - Flexible dotfiles structure
-- Cross-platform support (Windows, macOS, Linux, FreeBSD)
+- Cross-platform support (Windows, macOS, Linux, FreeBSD, OpenBSD)
 - Beautiful, modern CLI UX
 
 ## Configuration
@@ -42,7 +42,7 @@ os_only = true
 
 * `dots` — Map individual files or directories.
 * `auto` — Recursively map a directory while preserving its structure.
-* `[os]` — Define OS-specific configuration. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`)
+* `[os]` — Define OS-specific configuration. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
 * `os_only` — Only in `auto.[os]` rules. The rule's `source` is never deployed by the common `auto` rules on any OS, so `config/darwin` above ends up only in `~/.config` on macOS.
 * `ignore` — Skip paths inside an `auto` source. Patterns are relative to `source`, use `/` on every OS, and are case-sensitive.
   * `README.md` matches only the top-level `README.md`.
