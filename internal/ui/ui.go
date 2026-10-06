@@ -177,16 +177,6 @@ const (
 	symMissing = "×"
 )
 
-// targetLabel is the displayed target; a real directory (KindDir) gets a
-// trailing separator.
-func (p *Printer) targetLabel(e model.Entry) string {
-	s := p.display(e.Target)
-	if e.Kind == model.KindDir {
-		s += string(filepath.Separator)
-	}
-	return s
-}
-
 // itemLine prints "  <symbol> [word ]<target><suffix>". The symbol and the
 // word share one color.
 func (p *Printer) itemLine(t tone, sym, word string, e model.Entry, suffix string) {
@@ -194,16 +184,12 @@ func (p *Printer) itemLine(t tone, sym, word string, e model.Entry, suffix strin
 	if word != "" {
 		mark += " " + word
 	}
-	p.printf("%s%s %s%s\n", itemIndent, p.paint(t, mark), p.targetLabel(e), suffix)
+	p.printf("%s%s %s%s\n", itemIndent, p.paint(t, mark), p.display(e.Target), suffix)
 }
 
 // mapping is the doctor-only "-> source  origin" tail of an item line.
 func (p *Printer) mapping(e model.Entry) string {
-	s := ""
-	if e.Kind != model.KindDir {
-		s = " -> " + p.displaySource(e.Source)
-	}
-	return s + "  " + p.paint(toneDim, e.Origin.String())
+	return " -> " + p.displaySource(e.Source) + "  " + p.paint(toneDim, e.Origin.String())
 }
 
 // detail prints one line indented under its item.
@@ -226,11 +212,7 @@ func (p *Printer) overrides(ovs []model.Override) {
 	for _, o := range ovs {
 		p.printf("%s%s\n", itemIndent, p.display(o.Target))
 		p.detail(toneDim, "kept:    "+o.Winner.String())
-		if o.Loser.Kind == model.KindDir {
-			p.detail(toneDim, "ignored: "+o.Loser.Origin.String()+" (directory)")
-		} else {
-			p.detail(toneDim, "ignored: "+o.Loser.Origin.String()+" -> "+p.displaySource(o.Loser.Source))
-		}
+		p.detail(toneDim, "ignored: "+o.Loser.Origin.String()+" -> "+p.displaySource(o.Loser.Source))
 	}
 }
 
@@ -260,7 +242,7 @@ func doctorMark(r state.Result) (t tone, sym, word string) {
 		return toneYellow, symProblem, "error"
 	}
 	switch r.Status {
-	case state.ValidLink, state.ValidDir:
+	case state.ValidLink:
 		return toneGreen, symOK, ""
 	case state.NotExist:
 		return toneRed, symMissing, ""

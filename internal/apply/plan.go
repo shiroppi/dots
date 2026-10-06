@@ -118,7 +118,7 @@ func actionFor(r state.Result) Action {
 	switch r.Status {
 	case state.NotExist:
 		return ActionCreate
-	case state.ValidLink, state.ValidDir:
+	case state.ValidLink:
 		return ActionSkip
 	default:
 		return ActionReplace

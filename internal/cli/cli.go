@@ -232,13 +232,13 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 #   [dots.windows]
 #   "~/.vimrc" = "vim/windows-vimrc"
 #
-# [[auto]] links every file below source into target, optionally skipping
-# paths matched by ignore patterns:
+# [[auto]] links each item directly inside source (file or directory) into
+# target, optionally skipping top-level names matched by ignore patterns:
 #
 #   [[auto]]
 #   source = "config"
 #   target = "~/.config"
-#   ignore = ["**/*.bak"]
+#   ignore = ["README.md"]
 #
 # [[auto.<os>]] adds or overrides rules of an [[auto]] group on one OS:
 #

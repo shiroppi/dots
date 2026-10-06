@@ -1,49 +1,31 @@
 // Package ignore compiles and evaluates the `ignore` patterns of auto rules
 // (spec §5.3).
 //
-// Patterns are matched against the slash-separated path relative to the
-// source root, case-sensitively on every OS:
-//
-//   - "README.md" matches only the root-level README.md.
-//   - "**/README.md" matches README.md at any depth, including the root.
-//   - "*" does not cross "/".
-//   - "**" must be a whole path element.
+// A pattern is matched against the name of each item directly inside the
+// source root (auto links only the first level), case-sensitively on every
+// OS. It is a plain name in which "*" matches any run of characters,
+// including none; no other wildcard exists.
 package ignore
 
 import (
 	"errors"
 	"fmt"
 	"strings"
-
-	"github.com/bmatcuk/doublestar/v4"
 )
 
 // Validate reports why pattern is not an acceptable ignore pattern.
 func Validate(pattern string) error {
-	if pattern == "" {
+	switch {
+	case pattern == "":
 		return errors.New("pattern must not be empty")
-	}
-	if strings.Contains(pattern, "\\") {
-		return errors.New("pattern must use \"/\" as the separator (backslash is not allowed)")
-	}
-	if strings.HasPrefix(pattern, "/") {
-		return errors.New("pattern must be relative to the source root (leading \"/\" is not allowed)")
-	}
-	if strings.HasSuffix(pattern, "/") {
-		return errors.New("pattern must not end with \"/\"")
-	}
-	for _, seg := range strings.Split(pattern, "/") {
-		switch {
-		case seg == "":
-			return errors.New("pattern must not contain empty path elements (\"//\")")
-		case seg == "." || seg == "..":
-			return fmt.Errorf("pattern must not contain %q path elements", seg)
-		case seg != "**" && strings.Contains(seg, "**"):
-			return errors.New("\"**\" must be used as a whole path element")
-		}
-	}
-	if !doublestar.ValidatePattern(pattern) {
-		return errors.New("malformed glob pattern")
+	case pattern == "." || pattern == "..":
+		return fmt.Errorf("pattern must not be %q", pattern)
+	case strings.ContainsAny(pattern, "/\\"):
+		return errors.New("pattern must be a single top-level name (auto links only the first level, so path separators are not allowed)")
+	case strings.Contains(pattern, "**"):
+		return errors.New("\"**\" is not supported; use \"*\"")
+	case strings.ContainsAny(pattern, "?[{"):
+		return errors.New("only \"*\" is supported as a wildcard")
 	}
 	return nil
 }
@@ -51,10 +33,6 @@ func Validate(pattern string) error {
 // Matcher is a validated set of ignore patterns.
 type Matcher struct {
 	patterns []string
-	// subtrees are slash-separated directory paths (relative to the source
-	// root) whose whole content is treated as ignored; "" means everything.
-	subtrees []string
-	fold     bool // compare subtrees case-insensitively
 }
 
 // Compile validates every pattern and returns a Matcher. The error joins the
@@ -72,21 +50,6 @@ func Compile(patterns []string) (*Matcher, error) {
 	return &Matcher{patterns: append([]string(nil), patterns...)}, nil
 }
 
-// WithSubtrees returns a copy of m that additionally matches every path equal
-// to or below one of the given subtrees (slash-separated, relative to the
-// source root, "" meaning the whole root). fold selects case-insensitive
-// comparison of the subtrees. A nil m is treated as an empty Matcher.
-func (m *Matcher) WithSubtrees(subtrees []string, fold bool) *Matcher {
-	out := &Matcher{patterns: m.Patterns(), fold: fold}
-	for _, s := range subtrees {
-		if fold {
-			s = strings.ToLower(s)
-		}
-		out.subtrees = append(out.subtrees, s)
-	}
-	return out
-}
-
 // Patterns returns a copy of the compiled patterns.
 func (m *Matcher) Patterns() []string {
 	if m == nil {
@@ -95,25 +58,38 @@ func (m *Matcher) Patterns() []string {
 	return append([]string(nil), m.patterns...)
 }
 
-// Match reports whether rel, a slash-separated path relative to the source
+// Match reports whether name, the name of an item directly inside the source
 // root, is matched by any pattern. A nil Matcher matches nothing.
-func (m *Matcher) Match(rel string) bool {
+func (m *Matcher) Match(name string) bool {
 	if m == nil {
 		return false
 	}
-	key := rel
-	if m.fold {
-		key = strings.ToLower(rel)
-	}
-	for _, s := range m.subtrees {
-		if s == "" || key == s || strings.HasPrefix(key, s+"/") {
-			return true
-		}
-	}
 	for _, p := range m.patterns {
-		if ok, err := doublestar.Match(p, rel); err == nil && ok {
+		if match(p, name) {
 			return true
 		}
 	}
 	return false
+}
+
+// match reports whether name matches pattern, where "*" matches any run of
+// characters (including none) and everything else matches itself.
+func match(pattern, name string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == name
+	}
+	first, last := parts[0], parts[len(parts)-1]
+	if !strings.HasPrefix(name, first) {
+		return false
+	}
+	name = name[len(first):]
+	for _, mid := range parts[1 : len(parts)-1] {
+		i := strings.Index(name, mid)
+		if i < 0 {
+			return false
+		}
+		name = name[i+len(mid):]
+	}
+	return strings.HasSuffix(name, last)
 }

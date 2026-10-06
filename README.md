@@ -9,8 +9,7 @@ Your dotfiles, your environment.
 
 A small, declarative dotfiles manager for people who want their configuration to remain itself.
 
-> [!NOTE]
-> Although this software is under construction, it currently works largely in accordance with the v0.1 architecture document.
+<img width="631" height="302" alt="image" src="https://github.com/user-attachments/assets/0ca23527-3514-472f-8124-54c54d4c527e" />
 
 ## Features
 
@@ -32,7 +31,7 @@ A small, declarative dotfiles manager for people who want their configuration to
 [[auto]]
 source = "config"
 target = "~/.config"
-ignore = ["README.md", "**/.DS_Store"]
+ignore = ["README.md", ".DS_Store"]
 
 [[auto.darwin]]
 source = "config/darwin"
@@ -40,15 +39,11 @@ target = "~/.config"
 os_only = true
 ```
 
-* `dots` — Map individual files or directories.
-* `auto` — Recursively map a directory while preserving its structure.
-* `[os]` — Define OS-specific configuration. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
-* `os_only` — Only in `auto.[os]` rules. The rule's `source` is never deployed by the common `auto` rules on any OS, so `config/darwin` above ends up only in `~/.config` on macOS.
-* `ignore` — Skip paths inside an `auto` source. Patterns are relative to `source`, use `/` on every OS, and are case-sensitive.
-  * `README.md` matches only the top-level `README.md`.
-  * `*` matches within a single path element and never crosses `/`.
-  * `**` matches zero or more directories and must be a whole path element, so `**/.DS_Store` matches `
-.DS_Store` at any depth, including the top level.
+* `dots` — Link individual files or directories.
+* `auto` — Link each top-level item of `source` into `target` (`config/tmux` → `~/.config/tmux`).
+* `[os]` — OS-specific rules. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
+* `os_only` — `auto.[os]` only. Excludes the rule's `source` from the common `auto` rules, so the contents of `config/darwin` are linked only on macOS.
+* `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
 
 ### Directory structure
 

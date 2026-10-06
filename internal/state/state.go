@@ -55,9 +55,6 @@ const (
 	InvalidLink
 	// FileOrDir: a regular file or directory occupies the target.
 	FileOrDir
-	// ValidDir: the target is a real directory (not a symlink) for a KindDir
-	// entry.
-	ValidDir
 )
 
 func (s Status) String() string {
@@ -72,8 +69,6 @@ func (s Status) String() string {
 		return "InvalidLink"
 	case FileOrDir:
 		return "FileOrDir"
-	case ValidDir:
-		return "ValidDir"
 	default:
 		return fmt.Sprintf("Status(%d)", int(s))
 	}
@@ -95,10 +90,10 @@ type Result struct {
 	Err error
 }
 
-// OK reports whether the entry is valid and already in place (a correct link
-// or an existing real directory).
+// OK reports whether the entry is valid and already in place (a correct
+// link).
 func (r Result) OK() bool {
-	return r.Err == nil && (r.Status == ValidLink || r.Status == ValidDir)
+	return r.Err == nil && (r.Status == ValidLink)
 }
 
 // PathEqual compares two cleaned runtime paths. It is case-insensitive on
@@ -135,19 +130,6 @@ func Evaluate(fsys fs.Manager, e model.Entry) Result {
 	r := Result{Entry: e}
 	source, target := filepath.Clean(e.Source), filepath.Clean(e.Target)
 	var errs []error
-
-	if e.Kind == model.KindDir {
-		status, err := dirStatus(fsys, target)
-		r.Status = status
-		if err != nil {
-			errs = append(errs, err)
-		}
-		if err := checkParent(fsys, target); err != nil {
-			errs = append(errs, err)
-		}
-		r.Err = errors.Join(errs...)
-		return r
-	}
 
 	if err := checkSource(fsys, source); err != nil {
 		errs = append(errs, err)
@@ -266,28 +248,6 @@ func targetStatus(fsys fs.Manager, source, target string) (Status, string, error
 		return FileOrDir, "", nil
 	default:
 		return FileOrDir, "", fmt.Errorf("%w: target %s (%s) cannot be backed up or replaced", ErrUnsupportedType, target, mode.Type())
-	}
-}
-
-// dirStatus classifies the target of a KindDir entry.
-func dirStatus(fsys fs.Manager, target string) (Status, error) {
-	fi, err := fsys.Lstat(target)
-	if err != nil {
-		if isNotExist(err) {
-			return NotExist, nil
-		}
-		return Unknown, fmt.Errorf("cannot inspect target %s: %w", target, err)
-	}
-	mode := fi.Mode()
-	switch {
-	case mode&os.ModeSymlink != 0:
-		return InvalidLink, nil
-	case mode.IsDir():
-		return ValidDir, nil
-	case mode.IsRegular():
-		return FileOrDir, nil
-	default:
-		return FileOrDir, fmt.Errorf("%w: target %s (%s) cannot be backed up or replaced", ErrUnsupportedType, target, mode.Type())
 	}
 }
 

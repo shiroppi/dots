@@ -13,29 +13,24 @@ func TestValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{"empty", "", true},
-		{"backslash", `a\b`, true},
+		{"dot", ".", true},
+		{"dotdot", "..", true},
+		{"slash", "a/b", true},
 		{"leading slash", "/a", true},
 		{"trailing slash", "a/", true},
-		{"double slash", "a//b", true},
-		{"dotdot", "a/../b", true},
-		{"leading dotdot", "../a", true},
-		{"bare dotdot", "..", true},
+		{"backslash", `a\b`, true},
+		{"doublestar", "**", true},
+		{"doublestar prefix", "**/README.md", true},
 		{"suffix doublestar", "a**", true},
-		{"prefix doublestar", "**b", true},
-		{"doublestar in middle segment", "a/**b/c", true},
-		{"unclosed bracket", "[", true},
-		{"unclosed bracket in name", "a[b.txt", true},
+		{"question mark", "?.txt", true},
+		{"class", "[ab].txt", true},
+		{"alternation", "{a,b}", true},
 		{"plain", "README.md", false},
+		{"star", "*", false},
 		{"glob", "*.md", false},
-		{"doublestar prefix", "**/README.md", false},
-		{"doublestar suffix", "a/**", false},
-		{"doublestar alone", "**", false},
-		{"doublestar middle", "a/**/b", false},
-		{"class", "[ab].txt", false},
+		{"stars apart", "*.bak*", false},
 		{"dotfile", ".DS_Store", false},
-		{"dot element", "./a", true},
-		{"inner dot element", "a/./b", true},
-		{"unicode", "設定/*.txt", false},
+		{"unicode", "設定*", false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,12 +76,12 @@ func TestCompile(t *testing.T) {
 	})
 
 	t.Run("errors are joined", func(t *testing.T) {
-		_, err := Compile([]string{"", "fine", "a//b", "a**", "[", `x\y`})
+		_, err := Compile([]string{"", "fine", "a/b", "a**", "[", `x\y`})
 		if err == nil {
 			t.Fatal("expected error")
 		}
 		msg := err.Error()
-		for _, want := range []string{"ignore[0]", "ignore[2]", `"a//b"`, "ignore[3]", `"a**"`, "ignore[4]", `"["`, "ignore[5]"} {
+		for _, want := range []string{"ignore[0]", "ignore[2]", `"a/b"`, "ignore[3]", `"a**"`, "ignore[4]", `"["`, "ignore[5]"} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("message lacks %q: %q", want, msg)
 			}
@@ -104,45 +99,26 @@ func TestMatch(t *testing.T) {
 	tests := []struct {
 		name     string
 		patterns []string
-		path     string
+		in       string
 		want     bool
 	}{
-		{"root file matches", []string{"README.md"}, "README.md", true},
-		{"nested file not matched by bare name", []string{"README.md"}, "a/README.md", false},
-		{"deep nested not matched", []string{"README.md"}, "a/b/README.md", false},
-		{"globstar root", []string{"**/README.md"}, "README.md", true},
-		{"globstar depth 1", []string{"**/README.md"}, "a/README.md", true},
-		{"globstar depth 2", []string{"**/README.md"}, "a/b/README.md", true},
-		{"globstar other name", []string{"**/README.md"}, "a/README.txt", false},
-		{"star no cross slash", []string{"*.md"}, "a/b.md", false},
-		{"star root", []string{"*.md"}, "b.md", true},
+		{"exact", []string{"README.md"}, "README.md", true},
+		{"exact other", []string{"README.md"}, "README.txt", false},
+		{"star suffix", []string{"*.md"}, "b.md", true},
 		{"star wrong ext", []string{"*.md"}, "b.txt", false},
-		{"dir star child", []string{"a/*"}, "a/x", true},
-		{"dir star grandchild", []string{"a/*"}, "a/x/y", false},
-		{"double star alone root file", []string{"**"}, "a", true},
-		{"double star alone deep", []string{"**"}, "a/b/c", true},
-		{"dir doublestar deep", []string{"a/**"}, "a/x/y", true},
-		{"dir doublestar child", []string{"a/**"}, "a/x", true},
-		// doublestar v4 semantics: a trailing "/**" also matches the directory
-		// itself ("zero or more path elements"), so "a/**" matches "a".
-		{"dir doublestar matches dir itself", []string{"a/**"}, "a", true},
-		{"dir doublestar other dir", []string{"a/**"}, "b/x", false},
-		{"dir doublestar prefix sibling", []string{"a/**"}, "ab/x", false},
+		{"star matches empty", []string{"*.md"}, ".md", true},
+		{"star prefix", []string{"README*"}, "README.md", true},
+		{"star alone", []string{"*"}, "anything", true},
+		{"stars apart", []string{"a*b*c"}, "axxbyyc", true},
+		{"stars apart order", []string{"a*b*c"}, "acb", false},
+		{"prefix and suffix do not overlap", []string{"ab*ba"}, "aba", false},
+		{"literal question mark in name", []string{"*"}, "?", true},
 		{"case sensitive lower pattern", []string{"readme.md"}, "README.md", false},
 		{"case sensitive upper pattern", []string{"README.md"}, "readme.md", false},
-		{"ds store root", []string{".DS_Store"}, ".DS_Store", true},
-		{"ds store nested needs globstar", []string{".DS_Store"}, "a/.DS_Store", false},
-		{"ds store globstar nested", []string{"**/.DS_Store"}, "a/b/.DS_Store", true},
-		{"class a", []string{"[ab].txt"}, "a.txt", true},
-		{"class b", []string{"[ab].txt"}, "b.txt", true},
-		{"class miss", []string{"[ab].txt"}, "c.txt", false},
-		{"question mark", []string{"?.txt"}, "a.txt", true},
-		{"question mark no slash", []string{"?"}, "a/b", false},
+		{"dotfile", []string{".DS_Store"}, ".DS_Store", true},
 		{"multiple patterns second hits", []string{"x", "*.md"}, "r.md", true},
 		{"multiple patterns none hit", []string{"x", "*.md"}, "r.go", false},
-		{"unicode", []string{"設定/*.txt"}, "設定/a.txt", true},
-		// doublestar: "*" matches the empty string (zero characters).
-		{"empty path matched by star", []string{"*"}, "", true},
+		{"unicode", []string{"設定*"}, "設定.txt", true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -150,8 +126,8 @@ func TestMatch(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := m.Match(tc.path); got != tc.want {
-				t.Fatalf("patterns %q Match(%q)=%v want %v", tc.patterns, tc.path, got, tc.want)
+			if got := m.Match(tc.in); got != tc.want {
+				t.Fatalf("patterns %q Match(%q)=%v want %v", tc.patterns, tc.in, got, tc.want)
 			}
 		})
 	}

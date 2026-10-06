@@ -57,9 +57,13 @@ check_link() {
 }
 check_link "$FAKEHOME/.vimrc"
 [ "$(cat "$FAKEHOME/.vimrc")" = "set nocp" ] || { echo "FAIL: link content" >&2; exit 1; }
+# auto links the first-level item (the directory), not the files inside it.
+check_link "$FAKEHOME/.config/sub"
+[ "$(cat "$FAKEHOME/.config/sub/a.conf")" = "a=1" ] || { echo "FAIL: auto link content" >&2; exit 1; }
 
 # Idempotency.
 run 0 apply
 run 0 doctor
 check_link "$FAKEHOME/.vimrc"
+check_link "$FAKEHOME/.config/sub"
 echo "smoke OK"

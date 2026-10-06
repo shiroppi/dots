@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -619,61 +620,80 @@ func TestExitCodeFunction(t *testing.T) {
 	}
 }
 
-func TestAutoDirIgnored(t *testing.T) {
+func TestAutoFirstLevelLink(t *testing.T) {
 	te := setupEnv(t)
-	// Create an auto source that only has ignored files.
 	if err := te.fsys.MkdirAll(p("auto-src", "ign"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := dotsfs.WriteFile(te.fsys, p("auto-src", "ign", "ignored.txt"), []byte("ign"), 0o644); err != nil {
+	if err := dotsfs.WriteFile(te.fsys, p("auto-src", "ign", "deep.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
+	// A first-level directory becomes one link; its content is not matched
+	// against ignore.
 	toml := `
 [[auto]]
 source = "auto-src"
 target = "~/.cfg"
-ignore = ["**/*.txt"]
+ignore = ["*.txt"]
 `
 	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// dry-run apply
 	if c := te.run("apply", "--dry-run"); c != 0 {
 		t.Errorf("dry run failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "+ ") || !strings.Contains(te.out.String(), "ign"+string(filepath.Separator)) {
-		t.Errorf("dry-run missing dir create: %q", te.out.String())
+	if !strings.Contains(te.out.String(), "+ ") || !strings.Contains(te.out.String(), "ign") {
+		t.Errorf("dry-run missing link create: %q", te.out.String())
 	}
-	if _, err := te.fsys.Stat(p("home", ".cfg", "ign")); err == nil {
-		t.Errorf("dry-run should not create dir")
+	if _, err := te.fsys.Lstat(p("home", ".cfg", "ign")); err == nil {
+		t.Errorf("dry-run should not create anything")
 	}
-
-	// first apply
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("apply failed: %d", c)
 	}
 	info, err := te.fsys.Lstat(p("home", ".cfg", "ign"))
-	if err != nil || !info.IsDir() {
-		t.Errorf("expected directory created: %v", err)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("expected symlink created: %v", err)
 	}
-
-	// doctor
+	te.out.Reset()
 	if c := te.run("doctor"); c != 0 {
 		t.Errorf("doctor failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "ign"+string(filepath.Separator)) || !strings.Contains(te.out.String(), "✓ ") {
+	if !strings.Contains(te.out.String(), "✓ ") || !strings.Contains(te.out.String(), "ign -> ") {
 		t.Errorf("doctor output incorrect: %q", te.out.String())
 	}
-
-	// second apply
 	te.out.Reset()
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("second apply failed: %d", c)
 	}
 	if !strings.Contains(te.out.String(), "up to date") {
 		t.Errorf("second apply should be ok, got %q", te.out.String())
+	}
+}
+
+func TestAutoAllIgnoredPlacesNothing(t *testing.T) {
+	te := setupEnv(t)
+	if err := te.fsys.MkdirAll(p("auto-src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := dotsfs.WriteFile(te.fsys, p("auto-src", "only.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	toml := `
+[[auto]]
+source = "auto-src"
+target = "~/.cfg"
+ignore = ["*.txt"]
+`
+	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if c := te.run("apply"); c != 0 {
+		t.Errorf("apply failed: %d", c)
+	}
+	if _, err := te.fsys.Lstat(p("home", ".cfg")); err == nil {
+		t.Errorf("nothing should be created")
 	}
 }
 

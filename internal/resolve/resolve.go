@@ -6,14 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/shiroppi/dots/internal/config"
 	"github.com/shiroppi/dots/internal/fs"
-	"github.com/shiroppi/dots/internal/ignore"
 	"github.com/shiroppi/dots/internal/model"
 	"github.com/shiroppi/dots/internal/pathx"
 	"github.com/shiroppi/dots/internal/platform"
@@ -55,15 +53,15 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 	for _, g := range cfg.Auto {
 		if g.Common != nil {
 			rule := fmt.Sprintf("auto[%d]", g.Index)
-			common := *g.Common
-			common.Ignore = common.Ignore.WithSubtrees(osOnlySubtrees(env.GOOS, common.Source, osOnly), pathx.FoldsCase(env.GOOS))
-			c, e := expand(fsys, env, root, rule, model.LayerAuto, &common)
+			excl, nestedErrs := osOnlyExclusions(env.GOOS, rule, g.Common, osOnly)
+			errs = append(errs, nestedErrs...)
+			c, e := expand(fsys, env, root, rule, model.LayerAuto, g.Common, excl)
 			cands = append(cands, c...)
 			errs = append(errs, e...)
 		}
 		for j := range g.OS[env.GOOS] {
 			rule := fmt.Sprintf("auto[%d].%s[%d]", g.Index, env.GOOS, j)
-			c, e := expand(fsys, env, root, rule, model.LayerAutoOS, &g.OS[env.GOOS][j])
+			c, e := expand(fsys, env, root, rule, model.LayerAutoOS, &g.OS[env.GOOS][j], nil)
 			cands = append(cands, c...)
 			errs = append(errs, e...)
 		}
@@ -97,17 +95,6 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 				best = append(best, c)
 			}
 		}
-		allDirs := true
-		for _, b := range best {
-			if b.Kind != model.KindDir {
-				allDirs = false
-			}
-		}
-		if allDirs && len(best) > 1 {
-			// Several rules agree on a real directory: not a duplicate.
-			sort.SliceStable(best, func(i, j int) bool { return best[i].Origin.Rule < best[j].Origin.Rule })
-			best = best[:1]
-		}
 		if len(best) > 1 {
 			rules := make([]string, len(best))
 			for i, b := range best {
@@ -140,7 +127,7 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 				break
 			}
 			cur = parent
-			if pw, ok := byKey[pathx.Key(env.GOOS, cur)]; ok && pw.Kind != model.KindDir {
+			if pw, ok := byKey[pathx.Key(env.GOOS, cur)]; ok {
 				errs = append(errs, fmt.Errorf("target %s (%s) is inside target %s (%s); a target cannot be placed below another managed target",
 					filepath.Clean(w.Target), w.Origin.Rule, filepath.Clean(pw.Target), pw.Origin.Rule))
 			}
@@ -168,37 +155,78 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 	return &model.Resolution{ConfigPath: configPath, Root: root, Entries: winners, Overrides: overrides}, nil
 }
 
-// osOnlySources returns the sources of all os_only rules of every auto.<os>
-// table, including OSes other than the running one.
-func osOnlySources(cfg *config.Config) []string {
-	var out []string
+// osOnlySource is the source of one os_only rule and its locator.
+type osOnlySource struct {
+	source string
+	rule   string // e.g. auto[1].darwin[0]
+}
+
+// osOnlySources returns the os_only rules of every auto.<os> table, including
+// OSes other than the running one, in a deterministic order.
+func osOnlySources(cfg *config.Config) []osOnlySource {
+	var out []osOnlySource
 	for _, g := range cfg.Auto {
-		for _, rules := range g.OS {
-			for _, r := range rules {
+		for goos, rules := range g.OS {
+			for j, r := range rules {
 				if r.OSOnly {
-					out = append(out, r.Source)
+					out = append(out, osOnlySource{source: r.Source, rule: fmt.Sprintf("auto[%d].%s[%d]", g.Index, goos, j)})
 				}
 			}
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].rule < out[j].rule })
 	return out
 }
 
-// osOnlySubtrees returns, for the common rule source commonSrc, the os_only
-// sources that lie inside or equal it, expressed relative to commonSrc
-// (slash-separated; "" for commonSrc itself). All paths are cleaned relative
-// sources; no file system access or symlink resolution takes place.
-func osOnlySubtrees(goos, commonSrc string, sources []string) []string {
-	depth := len(strings.Split(commonSrc, "/"))
-	var out []string
+// exclusions lists what os_only rules remove from one common auto rule.
+type exclusions struct {
+	all   bool            // an os_only source equals the common source
+	names map[string]bool // normalised first-level names excluded
+}
+
+// osOnlyExclusions computes the first-level items of the common rule that the
+// os_only sources exclude (spec §5.2.1). An os_only source nested two or more
+// levels below the common source is a configuration error unless the
+// first-level item containing it is already excluded by another os_only rule
+// or by the common rule's ignore. No file system access or symlink
+// resolution takes place.
+func osOnlyExclusions(goos, rule string, common *config.AutoRule, sources []osOnlySource) (*exclusions, []error) {
+	ex := &exclusions{names: map[string]bool{}}
+	depth := len(strings.Split(common.Source, "/"))
+	type nested struct {
+		first string // first-level name below the common source
+		src   osOnlySource
+	}
+	var deep []nested
 	for _, s := range sources {
-		if pathx.Key(goos, s) == pathx.Key(goos, commonSrc) {
-			out = append(out, "")
-		} else if pathx.Contains(goos, commonSrc, s) {
-			out = append(out, strings.Join(strings.Split(s, "/")[depth:], "/"))
+		switch {
+		case pathx.Key(goos, s.source) == pathx.Key(goos, common.Source):
+			ex.all = true
+		case pathx.Contains(goos, common.Source, s.source):
+			parts := strings.Split(s.source, "/")[depth:]
+			if len(parts) == 1 {
+				ex.names[nameKey(goos, parts[0])] = true
+			} else {
+				deep = append(deep, nested{first: parts[0], src: s})
+			}
 		}
 	}
-	return out
+	var errs []error
+	for _, d := range deep {
+		if ex.all || ex.names[nameKey(goos, d.first)] || common.Ignore.Match(d.first) {
+			continue
+		}
+		errs = append(errs, fmt.Errorf("%s: os_only source %s is nested more than one level below %s source %s; auto links only the first level, so %s/%s would still be linked on every OS (point os_only at %s/%s or ignore %q in %s)",
+			d.src.rule, d.src.source, rule, common.Source, common.Source, d.first, common.Source, d.first, d.first, rule))
+	}
+	return ex, errs
+}
+
+func nameKey(goos, name string) string {
+	if pathx.FoldsCase(goos) {
+		return strings.ToLower(name)
+	}
+	return name
 }
 
 func joinRules(r []string) string {
@@ -212,8 +240,9 @@ func joinRules(r []string) string {
 	return s
 }
 
-// expand walks one auto rule's source directory (spec §5.3).
-func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.Layer, r *config.AutoRule) ([]model.Entry, []error) {
+// expand links every first-level item of one auto rule's source directory
+// (spec §5.3). ex lists the items removed by os_only rules (nil for none).
+func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.Layer, r *config.AutoRule, ex *exclusions) ([]model.Entry, []error) {
 	sourceRoot := pathx.ResolveSource(root, r.Source)
 	targetRoot, err := r.Target.Resolve(root, env.Home)
 	if err != nil {
@@ -229,115 +258,48 @@ func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.La
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return nil, []error{fmt.Errorf("%s: auto source %s must be a directory (not a file or symlink)", rule, sourceRoot)}
 	}
-	if ents, err := fsys.ReadDir(sourceRoot); err == nil && len(ents) == 0 {
-		// Physically empty root: place it as a single link (spec §5.3 rule 4),
-		// unless that would replace the home directory or repository root.
-		if r.Target.IsBase() {
-			return nil, []error{fmt.Errorf("%s: source %s is empty; refusing to replace %s with a symlink", rule, sourceRoot, r.Target.BaseName())}
-		}
-		return []model.Entry{{
-			Target: targetRoot,
-			Source: sourceRoot,
-			Origin: model.Origin{Layer: layer, Rule: rule},
-		}}, nil
-	}
-	w := &walker{fsys: fsys, rule: rule, layer: layer, sourceRoot: sourceRoot, targetRoot: targetRoot, ign: r.Ignore}
-	if n := w.walk(""); n == 0 && len(w.errs) == 0 {
-		// Not physically empty but nothing survived (ignore / os_only). A base
-		// target (~ or .) must not become a managed directory: contribute nothing.
-		if !r.Target.IsBase() {
-			w.emitDir("")
-		}
-	}
-	return w.out, w.errs
-}
-
-type walker struct {
-	fsys       fs.Manager
-	rule       string
-	layer      model.Layer
-	sourceRoot string
-	targetRoot string
-	ign        *ignore.Matcher
-	out        []model.Entry
-	errs       []error
-}
-
-func (w *walker) emit(rel string) {
-	w.out = append(w.out, model.Entry{
-		Target: filepath.Join(w.targetRoot, filepath.FromSlash(rel)),
-		Source: filepath.Join(w.sourceRoot, filepath.FromSlash(rel)),
-		Origin: model.Origin{Layer: w.layer, Rule: w.rule},
-	})
-}
-
-func (w *walker) emitDir(rel string) {
-	w.out = append(w.out, model.Entry{
-		Target: filepath.Join(w.targetRoot, filepath.FromSlash(rel)),
-		Source: filepath.Join(w.sourceRoot, filepath.FromSlash(rel)),
-		Kind:   model.KindDir,
-		Origin: model.Origin{Layer: w.layer, Rule: w.rule},
-	})
-}
-
-func (w *walker) fail(format string, a ...interface{}) {
-	w.errs = append(w.errs, fmt.Errorf("%s: %s", w.rule, fmt.Sprintf(format, a...)))
-}
-
-// walk emits the entries below relDir and returns how many it emitted.
-func (w *walker) walk(relDir string) int {
-	count := 0
-	dir := filepath.Join(w.sourceRoot, filepath.FromSlash(relDir))
-	entries, err := w.fsys.ReadDir(dir)
+	entries, err := fsys.ReadDir(sourceRoot)
 	if err != nil {
-		w.fail("cannot read directory %s: %v", dir, err)
-		return 0
+		return nil, []error{fmt.Errorf("%s: cannot read directory %s: %w", rule, sourceRoot, err)}
+	}
+	var out []model.Entry
+	var errs []error
+	fail := func(format string, a ...interface{}) {
+		errs = append(errs, fmt.Errorf("%s: %s", rule, fmt.Sprintf(format, a...)))
 	}
 	for _, e := range entries {
-		rel := path.Join(relDir, e.Name())
-		if w.ign.Match(rel) {
+		name := e.Name()
+		if r.Ignore.Match(name) {
 			continue
 		}
-		full := filepath.Join(w.sourceRoot, filepath.FromSlash(rel))
+		if ex != nil && (ex.all || ex.names[nameKey(env.GOOS, name)]) {
+			continue
+		}
+		full := filepath.Join(sourceRoot, name)
 		mode := e.Mode()
 		switch {
 		case mode&os.ModeSymlink != 0:
-			if _, err := w.fsys.Stat(full); err != nil {
+			if _, err := fsys.Stat(full); err != nil {
 				switch {
 				case errors.Is(err, fs.ErrLinkLoop):
-					w.fail("symlink loop in auto source: %s", full)
+					fail("symlink loop in auto source: %s", full)
 				case errors.Is(err, fs.ErrNotExist):
-					w.fail("broken symlink in auto source: %s", full)
+					fail("broken symlink in auto source: %s", full)
 				default:
-					w.fail("cannot check symlink %s: %v", full, err)
+					fail("cannot check symlink %s: %v", full, err)
 				}
 				continue
 			}
-			w.emit(rel)
-			count++
-		case mode.IsRegular():
-			w.emit(rel)
-			count++
-		case mode.IsDir():
-			errsBefore := len(w.errs)
-			sub, err := w.fsys.ReadDir(full)
-			if err != nil {
-				w.fail("cannot read directory %s: %v", full, err)
-				continue
-			}
-			if len(sub) == 0 {
-				w.emit(rel)
-				count++
-			} else if n := w.walk(rel); n > 0 {
-				count += n
-			} else if len(w.errs) == errsBefore {
-				// Everything below was ignored: manage a real directory.
-				w.emitDir(rel)
-				count++
-			}
+		case mode.IsRegular(), mode.IsDir():
 		default:
-			w.fail("unsupported file type (%s) in auto source: %s", mode.Type(), full)
+			fail("unsupported file type (%s) in auto source: %s", mode.Type(), full)
+			continue
 		}
+		out = append(out, model.Entry{
+			Target: filepath.Join(targetRoot, name),
+			Source: full,
+			Origin: model.Origin{Layer: layer, Rule: rule},
+		})
 	}
-	return count
+	return out, errs
 }

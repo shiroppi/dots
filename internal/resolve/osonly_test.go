@@ -1,9 +1,8 @@
 package resolve
 
 import (
+	"strings"
 	"testing"
-
-	"github.com/shiroppi/dots/internal/model"
 )
 
 func TestOSOnlyReadmeExample(t *testing.T) {
@@ -29,7 +28,7 @@ os_only = true
 	res, err := run(t, m, "darwin", toml)
 	must(t, err)
 	eq(t, summary(res), []string{
-		`home/.config/karabiner/karabiner.json<-config/darwin/karabiner/karabiner.json[auto[0].darwin[0]]`,
+		`home/.config/karabiner<-config/darwin/karabiner[auto[0].darwin[0]]`,
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
 
@@ -58,8 +57,8 @@ target = "~/.config"
 	res, err = run(t, m, "darwin", tomlNoOSOnly)
 	must(t, err)
 	eq(t, summary(res), []string{
-		`home/.config/darwin/karabiner/karabiner.json<-config/darwin/karabiner/karabiner.json[auto[0]]`,
-		`home/.config/karabiner/karabiner.json<-config/darwin/karabiner/karabiner.json[auto[0].darwin[0]]`,
+		`home/.config/darwin<-config/darwin[auto[0]]`,
+		`home/.config/karabiner<-config/darwin/karabiner[auto[0].darwin[0]]`,
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
 }
@@ -173,26 +172,26 @@ source = "config/darwin"
 target = "~/.config"
 os_only = true
 `
-	res, err := run(t, m, "linux", toml)
-	must(t, err)
-	// For linux, auto[0] is completely excluded, so we get a single real-directory entry for target root
-	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindDir || res.Entries[0].Target != h(".config") {
-		t.Fatalf("expected real directory for excluded root, got: %v", summary(res))
+	// The common rule contributes nothing on every OS; that is not an error.
+	for _, goos := range []string{"linux", "openbsd"} {
+		res, err := run(t, m, goos, toml)
+		must(t, err)
+		if len(res.Entries) != 0 {
+			t.Fatalf("%s: expected no entries, got: %v", goos, summary(res))
+		}
 	}
-	res, err = run(t, m, "openbsd", toml)
+	// On darwin the os_only rule itself still applies.
+	res, err := run(t, m, "darwin", toml)
 	must(t, err)
-	// For openbsd, auto[0] is completely excluded, so we get a single real-directory entry for target root
-	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindDir || res.Entries[0].Target != h(".config") {
-		t.Fatalf("expected real directory for excluded root on openbsd, got: %v", summary(res))
-	}
+	eq(t, summary(res), []string{`home/.config/karabiner.json<-config/darwin/karabiner.json[auto[0].darwin[0]]`})
 }
 
-func TestOSOnlyEmptiedDirBecomesDir(t *testing.T) {
+func TestOSOnlyDirectChildOnlyThatItemExcluded(t *testing.T) {
 	m := build(t, tree{
-		dirs: []string{"config/os/darwin"},
 		files: []string{
 			"config/starship.toml",
 			"config/os/darwin/karabiner.json",
+			"config/os/linux/i3.conf",
 		},
 	})
 	toml := `
@@ -201,29 +200,153 @@ source = "config"
 target = "~/.config"
 
 [[auto.darwin]]
+source = "config/os"
+target = "~/.config"
+os_only = true
+`
+	// config/os is a direct child of the common source: only it is excluded.
+	for _, goos := range []string{"linux", "openbsd"} {
+		res, err := run(t, m, goos, toml)
+		must(t, err)
+		eq(t, summary(res), []string{`home/.config/starship.toml<-config/starship.toml[auto[0]]`})
+	}
+}
+
+func TestOSOnlyNestedCovered(t *testing.T) {
+	m := build(t, tree{
+		files: []string{
+			"config/starship.toml",
+			"config/os/darwin/a",
+			"config/os/linux/b",
+		},
+	})
+	want := []string{`home/.config/starship.toml<-config/starship.toml[auto[0]]`}
+
+	// Covered by an os_only rule on the first-level item itself.
+	covered := `
+[[auto]]
+source = "config"
+target = "~/.config"
+
+[[auto.darwin]]
+source = "config/os/darwin"
+target = "~/.config"
+os_only = true
+
+[[auto.linux]]
+source = "config/os"
+target = "~/.config"
+os_only = true
+`
+	for _, goos := range []string{"linux", "openbsd"} {
+		res, err := run(t, m, goos, covered)
+		must(t, err)
+		if goos == "openbsd" {
+			eq(t, summary(res), want)
+		}
+	}
+
+	// Covered by the common rule's ignore.
+	ignored := `
+[[auto]]
+source = "config"
+target = "~/.config"
+ignore = ["os"]
+
+[[auto.darwin]]
 source = "config/os/darwin"
 target = "~/.config"
 os_only = true
 `
-	res, err := run(t, m, "linux", toml)
+	res, err := run(t, m, "openbsd", ignored)
 	must(t, err)
-	// config/os is emptied by the exclusion of config/os/darwin, so it becomes a KindDir
-	eq(t, summary(res), []string{
-		`home/.config/os<-config/os[auto[0]]`,
-		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
-	})
-	if res.Entries[0].Kind != model.KindDir {
-		t.Errorf("expected config/os to be KindDir, got %v", res.Entries[0].Kind)
+	eq(t, summary(res), want)
+
+	// Covered by a different os_only rule whose source equals the common source
+	// makes the common rule empty.
+	whole := `
+[[auto]]
+source = "config"
+target = "~/.config"
+
+[[auto.linux]]
+source = "config"
+target = "~/.config"
+os_only = true
+
+[[auto.darwin]]
+source = "config/os/darwin"
+target = "~/.config"
+os_only = true
+`
+	if _, err := run(t, m, "openbsd", whole); err != nil {
+		t.Fatalf("unexpected: %v", err)
 	}
-	res, err = run(t, m, "openbsd", toml)
-	must(t, err)
-	// config/os is emptied by the exclusion of config/os/darwin, so it becomes a KindDir
-	eq(t, summary(res), []string{
-		`home/.config/os<-config/os[auto[0]]`,
-		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
+}
+
+func TestOSOnlyNestedUncovered(t *testing.T) {
+	m := build(t, tree{
+		files: []string{
+			"config/starship.toml",
+			"config/os/darwin/a",
+			"config/os/linux/b",
+		},
 	})
-	if res.Entries[0].Kind != model.KindDir {
-		t.Errorf("expected config/os to be KindDir on openbsd, got %v", res.Entries[0].Kind)
+	toml := `
+[[auto]]
+source = "config"
+target = "~/.config"
+
+[[auto]]
+
+[[auto.darwin]]
+source = "config/os/darwin"
+target = "~/.config"
+os_only = true
+`
+	// A configuration error regardless of the running OS.
+	for _, goos := range []string{"linux", "darwin", "openbsd"} {
+		res, err := run(t, m, goos, toml)
+		if err == nil || res != nil {
+			t.Fatalf("%s: expected error, got %v", goos, res)
+		}
+		for _, w := range []string{"auto[1].darwin[0]", "auto[0]", "config/os/darwin", "nested more than one level", "config/os"} {
+			if !strings.Contains(err.Error(), w) {
+				t.Errorf("%s: %q lacks %q", goos, err, w)
+			}
+		}
+	}
+}
+
+func TestOSOnlyNestedCaseInsensitive(t *testing.T) {
+	m := build(t, tree{
+		files: []string{
+			"config/starship.toml",
+			"config/os/darwin/a",
+		},
+	})
+	toml := `
+[[auto]]
+source = "config"
+target = "~/.config"
+
+[[auto.windows]]
+source = "config/Os"
+target = "~/.config"
+os_only = true
+
+[[auto.freebsd]]
+source = "config/os/darwin"
+target = "~/.config"
+os_only = true
+`
+	// Folded on darwin/windows: config/Os covers config/os/darwin.
+	res, err := run(t, m, "darwin", toml)
+	must(t, err)
+	eq(t, summary(res), []string{`home/.config/starship.toml<-config/starship.toml[auto[0]]`})
+	// Case-sensitive on linux: config/Os is unrelated, so the nested one errors.
+	if _, err := run(t, m, "linux", toml); err == nil {
+		t.Fatal("expected error on linux")
 	}
 }
 
@@ -278,82 +401,13 @@ source = "config/Darwin"
 target = "~/.config"
 os_only = true
 `
-	// Running on darwin: memfs is case-sensitive, but os_only subtrees matching folds case.
+	// Running on darwin: memfs is case-sensitive, but os_only matching folds case.
 	// We use auto.windows to avoid expanding the missing "config/Darwin" dir on memfs.
 	res, err := run(t, m, "darwin", toml)
 	must(t, err)
 	eq(t, summary(res), []string{
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
-}
-
-func TestOSOnlySubtrees(t *testing.T) {
-	tests := []struct {
-		name      string
-		goos      string
-		commonSrc string
-		sources   []string
-		want      []string
-	}{
-		{
-			name:      "exact match",
-			goos:      "linux",
-			commonSrc: "config/darwin",
-			sources:   []string{"config/darwin"},
-			want:      []string{""},
-		},
-		{
-			name:      "inside",
-			goos:      "linux",
-			commonSrc: "config",
-			sources:   []string{"config/darwin", "config/windows/app"},
-			want:      []string{"darwin", "windows/app"},
-		},
-		{
-			name:      "outside",
-			goos:      "linux",
-			commonSrc: "config",
-			sources:   []string{"other", "confignot/darwin"},
-			want:      nil,
-		},
-		{
-			name:      "case insensitive exact",
-			goos:      "darwin",
-			commonSrc: "config/darwin",
-			sources:   []string{"Config/Darwin"},
-			want:      []string{""},
-		},
-		{
-			name:      "case insensitive inside",
-			goos:      "windows",
-			commonSrc: "Config",
-			sources:   []string{"config/Darwin"},
-			want:      []string{"Darwin"},
-		},
-		{
-			name:      "case sensitive miss",
-			goos:      "linux",
-			commonSrc: "config",
-			sources:   []string{"Config/darwin"},
-			want:      nil,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := osOnlySubtrees(tt.goos, tt.commonSrc, tt.sources)
-			if len(got) == 0 && len(tt.want) == 0 {
-				return
-			}
-			if len(got) != len(tt.want) {
-				t.Fatalf("got %v, want %v", got, tt.want)
-			}
-			for i := range got {
-				if got[i] != tt.want[i] {
-					t.Fatalf("got %v, want %v", got, tt.want)
-				}
-			}
-		})
-	}
 }
 
 func TestOSOnlyBaseTargetExcluded(t *testing.T) {
@@ -405,40 +459,5 @@ ignore = ["*"]
 	must(t, err)
 	if len(res.Entries) != 0 {
 		t.Errorf("expected no entries, got: %v", summary(res))
-	}
-}
-
-func TestNonBaseTargetFullyIgnored(t *testing.T) {
-	m := build(t, tree{
-		files: []string{"home/f"},
-	})
-	toml := `
-[[auto]]
-source = "home"
-target = "~/.config"
-ignore = ["*"]
-`
-	res, err := run(t, m, "linux", toml)
-	must(t, err)
-	eq(t, summary(res), []string{
-		`home/.config<-home[auto[0]]`,
-	})
-	if res.Entries[0].Kind != model.KindDir {
-		t.Errorf("expected KindDir, got %v", res.Entries[0].Kind)
-	}
-}
-
-func TestBaseTargetPhysicallyEmptyError(t *testing.T) {
-	m := build(t, tree{
-		dirs: []string{"empty_home"},
-	})
-	toml := `
-[[auto]]
-source = "empty_home"
-target = "~"
-`
-	_, err := run(t, m, "linux", toml)
-	if err == nil {
-		t.Errorf("expected error for empty source root with base target, got nil")
 	}
 }

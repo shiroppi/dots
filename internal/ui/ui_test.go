@@ -318,18 +318,6 @@ func TestReportWarning(t *testing.T) {
 	checkContains(t, out, "  ~ ", "    warning: leftover not removed", "1 replaced, 1 warning(s)")
 }
 
-func TestDirEntryRendering(t *testing.T) {
-	var buf bytes.Buffer
-	pr := &Printer{W: &buf}
-	e := model.Entry{Target: "/t/d", Source: "/s/d", Kind: model.KindDir, Origin: model.Origin{Rule: "auto[0]"}}
-	pr.itemLine(toneNone, symOK, "", e, pr.mapping(e))
-	pr.overrides([]model.Override{{Target: "/t/d", Loser: model.Entry{Kind: model.KindDir, Origin: model.Origin{Rule: "auto[1]"}}}})
-	out := buf.String()
-	if !strings.Contains(out, string(filepath.Separator)+"  auto[0]") || strings.Contains(out, "->") || !strings.Contains(out, "ignored: auto[1] (directory)") {
-		t.Fatalf("got %q", out)
-	}
-}
-
 func TestRepoRelativeSources(t *testing.T) {
 	out := render(func(pr *Printer) { pr.Root = root(); pr.Doctor(testPlan()) })
 	checkContains(t, out, "Repository: "+root()+"\n\n", " -> "+filepath.Join("src", "ok")+"  ")
@@ -410,11 +398,9 @@ func TestDisplaySourceScenarios(t *testing.T) {
 	}
 }
 
-func TestOverridesAndDirSources(t *testing.T) {
+func TestOverridesSources(t *testing.T) {
 	plan := &apply.Plan{
-		Items: []apply.Item{
-			{Action: apply.ActionSkip, Result: state.Result{Entry: model.Entry{Target: p("d"), Kind: model.KindDir, Origin: model.Origin{Rule: "d"}}}},
-		},
+		Items: []apply.Item{},
 		Overrides: []model.Override{
 			{
 				Target: p("t"),
@@ -427,12 +413,9 @@ func TestOverridesAndDirSources(t *testing.T) {
 		pr.Root = p("repo")
 		pr.Plan(plan)
 	})
-	checkContains(t, out, "ignored: lose -> lose", p("d")+string(filepath.Separator)+"\n")
+	checkContains(t, out, "ignored: lose -> lose")
 	if strings.Contains(out, p("repo", "lose")) {
 		t.Errorf("loser source not relative: %q", out)
-	}
-	if strings.Contains(out, "d ->") {
-		t.Errorf("directory entry shows source: %q", out)
 	}
 }
 

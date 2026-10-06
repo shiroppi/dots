@@ -373,41 +373,10 @@ func TestResolveLinkText(t *testing.T) {
 	}
 }
 
-func TestEvaluateDirEntry(t *testing.T) {
-	e := model.Entry{Source: p("src", "d"), Target: p("home", ".d"), Kind: model.KindDir}
-	cases := []struct {
-		name   string
-		setup  func(t *testing.T, m fs.Manager)
-		status Status
-		ok     bool
-	}{
-		{"not exist", nil, NotExist, false},
-		{"real dir", func(t *testing.T, m fs.Manager) { mustNil(t, m.MkdirAll(e.Target, 0o755)) }, ValidDir, true},
-		{"file", func(t *testing.T, m fs.Manager) { mustNil(t, fs.WriteFile(m, e.Target, nil, 0o644)) }, FileOrDir, false},
-		{"symlink", func(t *testing.T, m fs.Manager) { mustNil(t, m.Symlink("nowhere", e.Target)) }, InvalidLink, false},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			m := fs.NewMem()
-			mustNil(t, m.MkdirAll(p("home"), 0o755))
-			if c.setup != nil {
-				c.setup(t, m)
-			}
-			r := Evaluate(m, e)
-			if r.Err != nil || r.Status != c.status || r.OK() != c.ok || r.Link != "" {
-				t.Fatalf("got %+v", r)
-			}
-		})
-	}
-	if ValidDir.String() != "ValidDir" {
-		t.Fatal(ValidDir.String())
-	}
-}
-
 func TestEvaluateParentIsFile(t *testing.T) {
 	m := newFS(t)
 	mustNil(t, fs.WriteFile(m, p("home", "fileparent"), []byte("data"), 0o644))
-	e := model.Entry{Source: p("src", "d"), Target: p("home", "fileparent", "sub"), Kind: model.KindDir}
+	e := model.Entry{Source: p("src", "d"), Target: p("home", "fileparent", "sub")}
 	r := Evaluate(m, e)
 	if !errors.Is(r.Err, ErrUnsafeParent) || r.Status != NotExist {
 		t.Fatalf("got status %v err %v, want NotExist + ErrUnsafeParent", r.Status, r.Err)

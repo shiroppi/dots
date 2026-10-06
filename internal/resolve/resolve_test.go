@@ -2,10 +2,12 @@ package resolve
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/shiroppi/dots/internal/config"
 	"github.com/shiroppi/dots/internal/fs"
@@ -187,7 +189,7 @@ target = "~/.cfg/common"
 	}
 }
 
-func TestAutoOSReplacesOnlyCollidingFile(t *testing.T) {
+func TestAutoOSReplacesOnlyCollidingItem(t *testing.T) {
 	m := build(t, tree{files: []string{"c/a", "c/b", "c/sub/d", "o/b", "o/sub/d", "o/new"}})
 	res, err := run(t, m, "darwin", `
 [[auto]]
@@ -203,7 +205,7 @@ target = "~/.config"
 		`home/.config/a<-c/a[auto[0]]`,
 		`home/.config/b<-o/b[auto[0].darwin[0]]`,
 		`home/.config/new<-o/new[auto[0].darwin[0]]`,
-		`home/.config/sub/d<-o/sub/d[auto[0].darwin[0]]`,
+		`home/.config/sub<-o/sub[auto[0].darwin[0]]`,
 	})
 	if len(res.Overrides) != 2 {
 		t.Fatalf("overrides: %+v", res.Overrides)
@@ -240,65 +242,73 @@ target = "~/.config"
 	}
 }
 
-func TestAutoEmptyDirAndIgnore(t *testing.T) {
+func TestAutoFirstLevelOnly(t *testing.T) {
 	m := build(t, tree{
-		dirs: []string{"s/emptydir", "s/onlyignored", "s/skipme/deep", "r"},
+		dirs: []string{"s/emptydir"},
 		files: []string{
-			"s/README.md", "s/top/README.md", "s/top/keep", "s/onlyignored/.DS_Store",
-			"s/skipme/deep/f", "s/skipme/g",
+			"s/starship.toml", "s/nvim/init.lua", "s/nvim/lua/core/opts.lua", "s/fish/config.fish",
 		},
 	})
+	res, err := run(t, m, "linux", "[[auto]]\nsource = \"s\"\ntarget = \"~/.config\"\n")
+	must(t, err)
+	// One link per first-level item; nothing below a directory is enumerated.
+	eq(t, summary(res), []string{
+		`home/.config/emptydir<-s/emptydir[auto[0]]`,
+		`home/.config/fish<-s/fish[auto[0]]`,
+		`home/.config/nvim<-s/nvim[auto[0]]`,
+		`home/.config/starship.toml<-s/starship.toml[auto[0]]`,
+	})
+}
+
+func TestAutoIgnoreFirstLevelOnly(t *testing.T) {
+	m := build(t, tree{
+		files: []string{
+			"s/README.md", "s/.DS_Store", "s/notes.bak", "s/top/README.md", "s/top/.DS_Store", "s/top/keep", "s/skipme/g",
+		},
+	})
+	// Patterns match first-level names; a linked directory's content is not
+	// inspected.
 	res, err := run(t, m, "linux", `
 [[auto]]
 source = "s"
 target = "~/.cfg"
-ignore = ["README.md", "**/.DS_Store", "skipme"]
+ignore = ["README.md", ".DS_Store", "*.bak", "skip*"]
 `)
 	must(t, err)
-	eq(t, summary(res), []string{
-		`home/.cfg/emptydir<-s/emptydir[auto[0]]`,
-		`home/.cfg/onlyignored<-s/onlyignored[auto[0]]`,     // emptied by ignore: real directory
-		`home/.cfg/top/README.md<-s/top/README.md[auto[0]]`, // root-only pattern does not match nested
-		`home/.cfg/top/keep<-s/top/keep[auto[0]]`,
-	})
+	eq(t, summary(res), []string{`home/.cfg/top<-s/top[auto[0]]`})
+}
 
-	// "**/README.md" matches at every depth including the root.
-	res, err = run(t, m, "linux", `
-[[auto]]
-source = "s"
-target = "~/.cfg"
-ignore = ["**/README.md", "**/.DS_Store", "skipme"]
-`)
-	must(t, err)
-	eq(t, summary(res), []string{
-		`home/.cfg/emptydir<-s/emptydir[auto[0]]`,
-		`home/.cfg/onlyignored<-s/onlyignored[auto[0]]`, // emptied by ignore: real directory
-		`home/.cfg/top/keep<-s/top/keep[auto[0]]`,
+func TestAutoNothingToPlace(t *testing.T) {
+	m := build(t, tree{
+		dirs:  []string{"empty"},
+		files: []string{"s/README.md", "s/.DS_Store"},
 	})
-
-	// A physically empty source root is placed as one link at the target root;
-	// a fully-ignored one produces a single real-directory entry there.
-	res, err = run(t, m, "linux", "[[auto]]\nsource = \"r\"\ntarget = \"~/.cfg\"\n")
-	must(t, err)
-	if len(res.Entries) != 1 || res.Entries[0].Kind == model.KindDir || res.Entries[0].Target != h(".cfg") || res.Entries[0].Source != p("r") {
-		t.Errorf("empty root: %v", summary(res))
+	for _, target := range []string{"~/.cfg", "~", ".", "~/"} {
+		for name, toml := range map[string]string{
+			"empty source": "[[auto]]\nsource = \"empty\"\ntarget = \"" + target + "\"\n",
+			"all ignored":  "[[auto]]\nsource = \"s\"\ntarget = \"" + target + "\"\nignore = [\"README.md\", \".DS_Store\"]\n",
+		} {
+			res, err := run(t, m, "linux", toml)
+			if err != nil || len(res.Entries) != 0 {
+				t.Errorf("%s, target %q: entries=%v err=%v", name, target, summary(res), err)
+			}
+		}
 	}
-	_, err = run(t, m, "linux", "[[auto]]\nsource = \"r\"\ntarget = \"~\"\n")
-	if err == nil || !strings.Contains(err.Error(), "refusing to replace the home directory with a symlink") {
-		t.Errorf("empty root, home target: %v", err)
-	}
-	res, err = run(t, m, "linux", "[[auto]]\nsource = \"s/onlyignored\"\ntarget = \"~/.cfg\"\nignore = [\".DS_Store\"]\n")
-	must(t, err)
-	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindDir || res.Entries[0].Target != h(".cfg") {
-		t.Errorf("ignored root: %v", summary(res))
+	// Same in an auto.<os> rule.
+	res, err := run(t, m, "linux", "[[auto]]\n\n[[auto.linux]]\nsource = \"empty\"\ntarget = \"~/.cfg\"\n")
+	if err != nil || len(res.Entries) != 0 {
+		t.Errorf("auto.linux empty: entries=%v err=%v", summary(res), err)
 	}
 }
 
 func TestAutoTargetHome(t *testing.T) {
-	m := build(t, tree{files: []string{"s/.zshrc"}})
+	m := build(t, tree{files: []string{"s/.zshrc", "s/.config/nvim/init.lua"}})
 	res, err := run(t, m, "linux", "[[auto]]\nsource = \"s\"\ntarget = \"~\"\n")
 	must(t, err)
-	eq(t, summary(res), []string{`home/.zshrc<-s/.zshrc[auto[0]]`})
+	eq(t, summary(res), []string{
+		`home/.config<-s/.config[auto[0]]`,
+		`home/.zshrc<-s/.zshrc[auto[0]]`,
+	})
 }
 
 func TestAutoSymlinks(t *testing.T) {
@@ -391,6 +401,93 @@ target = "~/.vim"
 `); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
+}
+
+func TestDotsInsideAutoLinkedDir(t *testing.T) {
+	m := build(t, tree{files: []string{"c/nvim/init.lua", "mine"}})
+	_, err := run(t, m, "linux", `
+[dots]
+"~/.config/nvim/init.lua" = "mine"
+
+[[auto]]
+source = "c"
+target = "~/.config"
+`)
+	if err == nil {
+		t.Fatal("expected parent/child conflict")
+	}
+	want := fmt.Sprintf("target %s (dots.%q) is inside target %s (auto[0])", h(".config", "nvim", "init.lua"), "~/.config/nvim/init.lua", h(".config", "nvim"))
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("got %v\nwant substring %q", err, want)
+	}
+	// Ignoring the directory in auto and listing the file in dots resolves it.
+	if _, err := run(t, m, "linux", `
+[dots]
+"~/.config/nvim/init.lua" = "mine"
+
+[[auto]]
+source = "c"
+target = "~/.config"
+ignore = ["nvim"]
+`); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+func TestAutoFirstLevelSymlinkAndUnsupported(t *testing.T) {
+	m := build(t, tree{
+		dirs:  []string{"s/realdir", "s2"},
+		links: map[string]string{"s/dirlink": "realdir", "s2/x": "missing"},
+	})
+	res, err := run(t, m, "linux", "[[auto]]\nsource = \"s\"\ntarget = \"~/.cfg\"\n")
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.cfg/dirlink<-s/dirlink[auto[0]]`,
+		`home/.cfg/realdir<-s/realdir[auto[0]]`,
+	})
+	if _, err := run(t, m, "linux", "[[auto]]\nsource = \"s2\"\ntarget = \"~/.cfg\"\n"); err == nil || !strings.Contains(err.Error(), "broken symlink") {
+		t.Errorf("broken: %v", err)
+	}
+	// A symlink nested below a first-level directory is not inspected.
+	m2 := build(t, tree{links: map[string]string{"s3/d/broken": "nowhere"}})
+	if _, err := run(t, m2, "linux", "[[auto]]\nsource = \"s3\"\ntarget = \"~/.cfg\"\n"); err != nil {
+		t.Errorf("nested broken link must not matter: %v", err)
+	}
+}
+
+type fakeInfo struct {
+	name string
+	mode fs.FileMode
+}
+
+func (f fakeInfo) Name() string       { return f.name }
+func (f fakeInfo) Size() int64        { return 0 }
+func (f fakeInfo) Mode() fs.FileMode  { return f.mode }
+func (f fakeInfo) ModTime() time.Time { return time.Time{} }
+func (f fakeInfo) IsDir() bool        { return f.mode.IsDir() }
+func (f fakeInfo) Sys() any           { return nil }
+
+// pipeFS reports an extra named pipe in every directory listing.
+type pipeFS struct{ fs.Manager }
+
+func (f pipeFS) ReadDir(name string) ([]fs.FileInfo, error) {
+	ents, err := f.Manager.ReadDir(name)
+	if err != nil {
+		return nil, err
+	}
+	return append(ents, fakeInfo{name: "pipe", mode: os.ModeNamedPipe}), nil
+}
+
+func TestAutoUnsupportedType(t *testing.T) {
+	m := pipeFS{build(t, tree{files: []string{"s/a"}})}
+	_, err := run(t, m, "linux", "[[auto]]\nsource = \"s\"\ntarget = \"~/.cfg\"\n")
+	if err == nil || !strings.Contains(err.Error(), "unsupported file type") || !strings.Contains(err.Error(), filepath.Join("s", "pipe")) {
+		t.Fatalf("got %v", err)
+	}
+	// An ignored unsupported item is skipped.
+	res, err := run(t, m, "linux", "[[auto]]\nsource = \"s\"\ntarget = \"~/.cfg\"\nignore = [\"pipe\"]\n")
+	must(t, err)
+	eq(t, summary(res), []string{`home/.cfg/a<-s/a[auto[0]]`})
 }
 
 func TestOtherOSIgnored(t *testing.T) {
@@ -494,177 +591,5 @@ target = "~/.cfg"
 			continue
 		}
 		eq(t, got, first)
-	}
-}
-
-func TestDirEntries(t *testing.T) {
-	m := build(t, tree{files: []string{"s/a/b/x", "s/only", "t/x", "u/x"}})
-	res, err := run(t, m, "linux", `
-[[auto]]
-source = "s"
-target = "~/.cfg"
-ignore = ["**/x", "only"]
-
-[[auto]]
-source = "t"
-target = "~/.t"
-ignore = ["x"]
-`)
-	must(t, err)
-	if len(res.Entries) != 2 || res.Entries[0].Kind != model.KindDir || res.Entries[1].Kind != model.KindDir {
-		t.Fatalf("got %v", summary(res))
-	}
-	// Deepest emptied dir for s; the target root itself for t.
-	if res.Entries[0].Target != h(".cfg", "a", "b") || res.Entries[1].Target != h(".t") {
-		t.Fatalf("got %v", summary(res))
-	}
-
-	// Same-priority dir entries agree (first rule wins); a link below is fine.
-	res, err = run(t, m, "linux", `
-[[auto]]
-source = "t"
-target = "~/.t"
-ignore = ["x"]
-
-[[auto]]
-source = "t"
-target = "~/.t"
-ignore = ["x"]
-
-[dots]
-"~/.t/y" = "u/x"
-`)
-	must(t, err)
-	if len(res.Entries) != 2 || res.Entries[0].Origin.Rule != "auto[0]" || res.Entries[0].Kind != model.KindDir {
-		t.Fatalf("got %v", summary(res))
-	}
-}
-
-func TestDirEntriesConflicts(t *testing.T) {
-	m := build(t, tree{files: []string{"s/only", "linksrc/cfg"}, dirs: []string{"linksrc/sub"}})
-
-	// Tie at same layer: KindDir (~/cfg from s) vs KindLink (~/cfg from
-	// linksrc/cfg) -> duplicate error
-	_, err := run(t, m, "linux", `
-[[auto]]
-source = "s"
-target = "~/cfg"
-ignore = ["only"]
-
-[[auto]]
-source = "linksrc"
-target = "~/"
-`)
-	if err == nil || !strings.Contains(err.Error(), "duplicate target") {
-		t.Fatalf("expected duplicate error, got %v", err)
-	}
-
-	// Dots-layer link at same target as auto KindDir -> link wins, KindDir is override
-	res, err := run(t, m, "linux", `
-[[auto]]
-source = "s"
-target = "~/.cfg"
-ignore = ["only"]
-
-[dots]
-"~/.cfg" = "linksrc/cfg"
-`)
-	must(t, err)
-	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindLink {
-		t.Fatalf("expected link to win, got %v", res.Entries)
-	}
-	if len(res.Overrides) != 1 || res.Overrides[0].Loser.Kind != model.KindDir {
-		t.Fatalf("expected KindDir as loser, got %v", res.Overrides)
-	}
-
-	// KindLink ancestor with KindDir below -> parent/child error
-	_, err = run(t, m, "linux", `
-[dots]
-"~/.cfg" = "linksrc/sub"
-
-[[auto]]
-source = "s"
-target = "~/.cfg/sub"
-ignore = ["only"]
-`)
-	if err == nil || !strings.Contains(err.Error(), "inside target") {
-		t.Fatalf("expected parent/child error, got %v", err)
-	}
-}
-
-func TestAutoEmptyRoot(t *testing.T) {
-	m := build(t, tree{
-		dirs:  []string{"empty1", "empty2", "nested/sub"},
-		files: []string{"f"},
-	})
-
-	// Scenario 1: Empty root, target "."
-	_, err := run(t, m, "linux", "[[auto]]\nsource = \"empty1\"\ntarget = \".\"\n")
-	if err == nil || !strings.Contains(err.Error(), "refusing to replace") || !strings.Contains(err.Error(), "the repository root") {
-		t.Errorf("empty root, repo target: %v", err)
-	}
-
-	// Scenario 2: Empty root in auto.linux
-	// An OS-only group still needs its (empty) parent [[auto]] element.
-	res, err := run(t, m, "linux", "[[auto]]\n\n[[auto.linux]]\nsource = \"empty1\"\ntarget = \"~/.cfg\"\n")
-	must(t, err)
-	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindLink || res.Entries[0].Target != h(".cfg") || res.Entries[0].Origin.Layer != model.LayerAutoOS {
-		t.Errorf("empty root auto.linux: %+v", res.Entries)
-	}
-
-	// Scenario 3: auto and auto.linux empty root, same target -> Override
-	res, err = run(t, m, "linux", `
-[[auto]]
-source = "empty1"
-target = "~/.cfg"
-
-[[auto.linux]]
-source = "empty2"
-target = "~/.cfg"
-`)
-	must(t, err)
-	if len(res.Entries) != 1 || res.Entries[0].Source != p("empty2") {
-		t.Errorf("expected auto.linux to win, got: %v", summary(res))
-	}
-	if len(res.Overrides) != 1 || res.Overrides[0].Winner.Layer != model.LayerAutoOS || res.Overrides[0].Loser.Origin.Layer != model.LayerAuto {
-		t.Errorf("expected auto override, got: %+v", res.Overrides)
-	}
-
-	// Scenario 4: Two common [[auto]] groups, same target -> duplicate error
-	_, err = run(t, m, "linux", `
-[[auto]]
-source = "empty1"
-target = "~/.cfg"
-
-[[auto]]
-source = "empty2"
-target = "~/.cfg"
-`)
-	if err == nil || !strings.Contains(err.Error(), "duplicate target") {
-		t.Errorf("expected duplicate error, got %v", err)
-	}
-
-	// Scenario 5: Empty-root link at ~/.cfg plus another rule placing files under ~/.cfg/x
-	_, err = run(t, m, "linux", `
-[dots]
-"~/.cfg/x" = "f"
-
-[[auto]]
-source = "empty1"
-target = "~/.cfg"
-`)
-	if err == nil || !strings.Contains(err.Error(), "inside target") {
-		t.Errorf("expected inside target error, got %v", err)
-	}
-
-	// Scenario 6: Source root containing only an empty subdirectory "sub"
-	res, err = run(t, m, "linux", `
-[[auto]]
-source = "nested"
-target = "~/.cfg"
-`)
-	must(t, err)
-	if len(res.Entries) != 1 || res.Entries[0].Kind != model.KindLink || res.Entries[0].Target != h(".cfg", "sub") {
-		t.Errorf("expected nested sub link, got: %+v", res.Entries)
 	}
 }

@@ -3,7 +3,6 @@ module github.com/shiroppi/dots
 go 1.24.0
 
 require (
-	github.com/bmatcuk/doublestar/v4 v4.10.2
 	github.com/charmbracelet/bubbletea v1.3.4
 	github.com/charmbracelet/huh v0.6.0
 	github.com/go-git/go-billy/v5 v5.6.2

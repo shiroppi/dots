@@ -35,7 +35,7 @@ func TestParseValid(t *testing.T) {
 [[auto]]
 source = "config/auto"
 target = "~/.config"
-ignore = ["README.md", "**/.DS_Store"]
+ignore = ["README.md", ".DS_Store"]
 
 [[auto.darwin]]
 source = "config/darwin-auto"
@@ -71,7 +71,7 @@ target = "~"
 	if g0.Index != 0 || g0.Common == nil || g0.Common.Source != "config/auto" || !g0.Common.Target.Home {
 		t.Errorf("g0: %+v", g0)
 	}
-	if !g0.Common.Ignore.Match("README.md") || !g0.Common.Ignore.Match("a/.DS_Store") || g0.Common.Ignore.Match("a/README.md") {
+	if !g0.Common.Ignore.Match("README.md") || !g0.Common.Ignore.Match(".DS_Store") || g0.Common.Ignore.Match("README.txt") {
 		t.Error("ignore matcher wrong")
 	}
 	if len(g0.OS["darwin"]) != 1 || g0.OS["darwin"][0].Ignore == nil || g0.OS["darwin"][0].Ignore.Match("x") {
@@ -125,6 +125,10 @@ func TestParseErrors(t *testing.T) {
 		{"ignore not array", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = \"x\"\n", []string{"auto[0].ignore: must be an array of strings"}},
 		{"ignore non-string element", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"x\", 2]\n", []string{"auto[0].ignore[1]: must be a string"}},
 		{"ignore invalid pattern", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"/abs\"]\n", []string{"auto[0].", "ignore[0]", "/abs"}},
+		{"ignore path pattern", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"nvim/README.md\"]\n", []string{"auto[0].", "ignore[0]", "single top-level name"}},
+		{"ignore doublestar", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"**/.DS_Store\"]\n", []string{"auto[0].", "ignore[0]", "**/.DS_Store"}},
+		{"ignore question mark", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"?.txt\"]\n", []string{"auto[0].", "ignore[0]", "is supported as a wildcard"}},
+		{"ignore class", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"[ab]\"]\n", []string{"auto[0].", "ignore[0]", "is supported as a wildcard"}},
 		{"os rule missing source", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\n[[auto.linux]]\ntarget = \"~/b\"\n", []string{"auto[0].linux[0]", `missing required key "source"`}},
 		{"os rule unknown key", "[[auto]]\n[[auto.linux]]\nsource = \"a\"\ntarget = \"~/b\"\nfoo = 1\n", []string{"auto[0].linux[0]", `unknown key "foo"`}},
 		{"os rule bad target", "[[auto]]\n[[auto.linux]]\nsource = \"a\"\ntarget = \"C:/x\"\n", []string{"auto[0].linux[0].target", "drive"}},

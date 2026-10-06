@@ -20,10 +20,10 @@ func TestOutputPlanPlain(t *testing.T) {
 
 	plan := &apply.Plan{
 		Items: []apply.Item{
-			{Action: apply.ActionCreate, Result: state.Result{Entry: model.Entry{Target: fp("t", "c"), Kind: model.KindLink}}},
-			{Action: apply.ActionReplace, Result: state.Result{Entry: model.Entry{Target: fp("t", "r"), Kind: model.KindLink}, Status: state.FileOrDir}},
-			{Action: apply.ActionSkip, Result: state.Result{Entry: model.Entry{Target: fp("t", "s"), Kind: model.KindLink}}},
-			{Action: apply.ActionError, Result: state.Result{Entry: model.Entry{Target: fp("t", "e"), Kind: model.KindLink}, Err: errors.New("fail")}},
+			{Action: apply.ActionCreate, Result: state.Result{Entry: model.Entry{Target: fp("t", "c")}}},
+			{Action: apply.ActionReplace, Result: state.Result{Entry: model.Entry{Target: fp("t", "r")}, Status: state.FileOrDir}},
+			{Action: apply.ActionSkip, Result: state.Result{Entry: model.Entry{Target: fp("t", "s")}}},
+			{Action: apply.ActionError, Result: state.Result{Entry: model.Entry{Target: fp("t", "e")}, Err: errors.New("fail")}},
 		},
 	}
 	pr.Plan(plan)
@@ -55,26 +55,12 @@ func TestOutputPlanUpToDate(t *testing.T) {
 	pr := &Printer{W: &buf, Color: false}
 	plan := &apply.Plan{
 		Items: []apply.Item{
-			{Action: apply.ActionSkip, Result: state.Result{Entry: model.Entry{Target: fp("t", "s"), Kind: model.KindLink}}},
+			{Action: apply.ActionSkip, Result: state.Result{Entry: model.Entry{Target: fp("t", "s")}}},
 		},
 	}
 	pr.Plan(plan)
 	if !strings.Contains(buf.String(), "Everything is up to date.") {
 		t.Errorf("missing 'Everything is up to date.'\ngot:\n%s", buf.String())
-	}
-}
-
-func TestOutputKindDir(t *testing.T) {
-	var buf bytes.Buffer
-	pr := &Printer{W: &buf, Color: false}
-	plan := &apply.Plan{
-		Items: []apply.Item{
-			{Action: apply.ActionCreate, Result: state.Result{Entry: model.Entry{Target: fp("t", "dir"), Kind: model.KindDir}}},
-		},
-	}
-	pr.Plan(plan)
-	if !strings.Contains(buf.String(), fp("t", "dir")+string(filepath.Separator)) {
-		t.Errorf("missing trailing separator for KindDir\ngot:\n%s", buf.String())
 	}
 }
 

@@ -5,7 +5,6 @@
 package deps
 
 import (
-	_ "github.com/bmatcuk/doublestar/v4"
 	_ "github.com/charmbracelet/huh"
 	_ "github.com/go-git/go-billy/v5/memfs"
 	_ "github.com/pelletier/go-toml/v2"
