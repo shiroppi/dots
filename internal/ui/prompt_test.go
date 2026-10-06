@@ -30,15 +30,16 @@ func TestFormResult(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := formResult(tc.state, tc.err)
-			if tc.want == ErrAborted {
+			switch tc.want {
+			case ErrAborted:
 				if !errors.Is(got, ErrAborted) {
 					t.Errorf("formResult(%v, %v) = %v, want %v", tc.state, tc.err, got, tc.want)
 				}
-			} else if tc.want == nil {
+			case nil:
 				if got != nil {
 					t.Errorf("formResult(%v, %v) = %v, want nil", tc.state, tc.err, got)
 				}
-			} else {
+			default:
 				if got == nil || got.Error() != tc.want.Error() {
 					t.Errorf("formResult(%v, %v) = %v, want %v", tc.state, tc.err, got, tc.want)
 				}
