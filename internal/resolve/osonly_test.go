@@ -313,3 +313,84 @@ func TestOSOnlySubtrees(t *testing.T) {
 		})
 	}
 }
+
+func TestOSOnlyBaseTargetExcluded(t *testing.T) {
+	m := build(t, tree{
+		files: []string{"home/f"},
+	})
+	toml := `
+[[auto]]
+source = "home"
+target = "~"
+
+[[auto.darwin]]
+source = "home"
+target = "~/.config"
+os_only = true
+`
+	// On linux, common is excluded, yielding no entries. auto.darwin doesn't run.
+	res, err := run(t, m, "linux", toml)
+	must(t, err)
+	if len(res.Entries) != 0 {
+		t.Errorf("expected no entries on linux, got: %v", summary(res))
+	}
+
+	// On darwin, common is excluded, yielding no entries. auto.darwin deploys "home" to "~/.config".
+	res, err = run(t, m, "darwin", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config/f<-home/f[auto[0].darwin[0]]`,
+	})
+}
+
+func TestBaseTargetFullyIgnored(t *testing.T) {
+	m := build(t, tree{
+		files: []string{"home/f"},
+	})
+	toml := `
+[[auto]]
+source = "home"
+target = "~"
+ignore = ["*"]
+`
+	res, err := run(t, m, "linux", toml)
+	must(t, err)
+	if len(res.Entries) != 0 {
+		t.Errorf("expected no entries, got: %v", summary(res))
+	}
+}
+
+func TestNonBaseTargetFullyIgnored(t *testing.T) {
+	m := build(t, tree{
+		files: []string{"home/f"},
+	})
+	toml := `
+[[auto]]
+source = "home"
+target = "~/.config"
+ignore = ["*"]
+`
+	res, err := run(t, m, "linux", toml)
+	must(t, err)
+	eq(t, summary(res), []string{
+		`home/.config<-home[auto[0]]`,
+	})
+	if res.Entries[0].Kind != model.KindDir {
+		t.Errorf("expected KindDir, got %v", res.Entries[0].Kind)
+	}
+}
+
+func TestBaseTargetPhysicallyEmptyError(t *testing.T) {
+	m := build(t, tree{
+		dirs: []string{"empty_home"},
+	})
+	toml := `
+[[auto]]
+source = "empty_home"
+target = "~"
+`
+	_, err := run(t, m, "linux", toml)
+	if err == nil {
+		t.Errorf("expected error for empty source root with base target, got nil")
+	}
+}
