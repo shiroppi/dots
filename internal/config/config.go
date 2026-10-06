@@ -80,6 +80,7 @@ type AutoRule struct {
 	Target    pathx.Target
 	Source    string
 	Ignore    *ignore.Matcher // never nil
+	OSOnly    bool            // os_only (auto.<os> rules only)
 }
 
 var knownOS = map[string]bool{}
@@ -265,6 +266,8 @@ func (p *parser) parseAuto(v interface{}, cfg *Config) {
 		for _, k := range sortedKeys(tbl) {
 			switch {
 			case k == "source" || k == "target" || k == "ignore":
+			case k == "os_only":
+				p.errf("%s: os_only is only allowed in auto.<os> rules", loc)
 			case knownOS[k]:
 				hasOS = true
 				sub, ok := tbl[k].([]interface{})
@@ -305,18 +308,27 @@ func (p *parser) parseAuto(v interface{}, cfg *Config) {
 	}
 }
 
-// rule validates source/target/ignore of one table. When strictKeys is set,
-// keys other than source/target/ignore are reported (OS rules); for the group
+// rule validates source/target/ignore (and os_only for OS rules) of one table.
+// When strictKeys is set, other keys are reported (OS rules); for the group
 // table the caller has already checked keys.
 func (p *parser) rule(loc string, tbl map[string]interface{}, strictKeys bool) (AutoRule, bool) {
 	ok := true
 	if strictKeys {
 		for _, k := range sortedKeys(tbl) {
-			if k != "source" && k != "target" && k != "ignore" {
-				p.errf("%s: unknown key %q (allowed: source, target, ignore)", loc, k)
+			if k != "source" && k != "target" && k != "ignore" && k != "os_only" {
+				p.errf("%s: unknown key %q (allowed: source, target, ignore, os_only)", loc, k)
 				ok = false
 			}
 		}
+	}
+	var osOnly bool
+	if v, present := tbl["os_only"]; present && strictKeys {
+		b, isBool := v.(bool)
+		if !isBool {
+			p.errf("%s.os_only: must be a boolean, got %s", loc, typeName(v))
+			ok = false
+		}
+		osOnly = b
 	}
 	str := func(key string) (string, bool) {
 		v, present := tbl[key]
@@ -331,7 +343,7 @@ func (p *parser) rule(loc string, tbl map[string]interface{}, strictKeys bool) (
 		}
 		return s, true
 	}
-	var r AutoRule
+	r := AutoRule{OSOnly: osOnly}
 	if rawT, got := str("target"); got {
 		t, err := pathx.ParseTarget(rawT)
 		if err != nil {

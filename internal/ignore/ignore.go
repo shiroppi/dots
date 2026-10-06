@@ -51,6 +51,10 @@ func Validate(pattern string) error {
 // Matcher is a validated set of ignore patterns.
 type Matcher struct {
 	patterns []string
+	// subtrees are slash-separated directory paths (relative to the source
+	// root) whose whole content is treated as ignored; "" means everything.
+	subtrees []string
+	fold     bool // compare subtrees case-insensitively
 }
 
 // Compile validates every pattern and returns a Matcher. The error joins the
@@ -68,6 +72,21 @@ func Compile(patterns []string) (*Matcher, error) {
 	return &Matcher{patterns: append([]string(nil), patterns...)}, nil
 }
 
+// WithSubtrees returns a copy of m that additionally matches every path equal
+// to or below one of the given subtrees (slash-separated, relative to the
+// source root, "" meaning the whole root). fold selects case-insensitive
+// comparison of the subtrees. A nil m is treated as an empty Matcher.
+func (m *Matcher) WithSubtrees(subtrees []string, fold bool) *Matcher {
+	out := &Matcher{patterns: m.Patterns(), fold: fold}
+	for _, s := range subtrees {
+		if fold {
+			s = strings.ToLower(s)
+		}
+		out.subtrees = append(out.subtrees, s)
+	}
+	return out
+}
+
 // Patterns returns a copy of the compiled patterns.
 func (m *Matcher) Patterns() []string {
 	if m == nil {
@@ -81,6 +100,15 @@ func (m *Matcher) Patterns() []string {
 func (m *Matcher) Match(rel string) bool {
 	if m == nil {
 		return false
+	}
+	key := rel
+	if m.fold {
+		key = strings.ToLower(rel)
+	}
+	for _, s := range m.subtrees {
+		if s == "" || key == s || strings.HasPrefix(key, s+"/") {
+			return true
+		}
 	}
 	for _, p := range m.patterns {
 		if ok, err := doublestar.Match(p, rel); err == nil && ok {

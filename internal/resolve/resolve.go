@@ -9,6 +9,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/shiroppi/dots/internal/config"
 	"github.com/shiroppi/dots/internal/fs"
@@ -50,10 +51,13 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 	flat(cfg.DotsOS[env.GOOS], model.LayerDotsOS, "dots."+env.GOOS)
 
 	// Auto notation.
+	osOnly := osOnlySources(cfg)
 	for _, g := range cfg.Auto {
 		if g.Common != nil {
 			rule := fmt.Sprintf("auto[%d]", g.Index)
-			c, e := expand(fsys, env, root, rule, model.LayerAuto, g.Common)
+			common := *g.Common
+			common.Ignore = common.Ignore.WithSubtrees(osOnlySubtrees(env.GOOS, common.Source, osOnly), pathx.FoldsCase(env.GOOS))
+			c, e := expand(fsys, env, root, rule, model.LayerAuto, &common)
 			cands = append(cands, c...)
 			errs = append(errs, e...)
 		}
@@ -162,6 +166,39 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 		winners[i].Source = filepath.Clean(winners[i].Source)
 	}
 	return &model.Resolution{ConfigPath: configPath, Root: root, Entries: winners, Overrides: overrides}, nil
+}
+
+// osOnlySources returns the sources of all os_only rules of every auto.<os>
+// table, including OSes other than the running one.
+func osOnlySources(cfg *config.Config) []string {
+	var out []string
+	for _, g := range cfg.Auto {
+		for _, rules := range g.OS {
+			for _, r := range rules {
+				if r.OSOnly {
+					out = append(out, r.Source)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// osOnlySubtrees returns, for the common rule source commonSrc, the os_only
+// sources that lie inside or equal it, expressed relative to commonSrc
+// (slash-separated; "" for commonSrc itself). All paths are cleaned relative
+// sources; no file system access or symlink resolution takes place.
+func osOnlySubtrees(goos, commonSrc string, sources []string) []string {
+	depth := len(strings.Split(commonSrc, "/"))
+	var out []string
+	for _, s := range sources {
+		if pathx.Key(goos, s) == pathx.Key(goos, commonSrc) {
+			out = append(out, "")
+		} else if pathx.Contains(goos, commonSrc, s) {
+			out = append(out, strings.Join(strings.Split(s, "/")[depth:], "/"))
+		}
+	}
+	return out
 }
 
 func joinRules(r []string) string {
