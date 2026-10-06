@@ -53,6 +53,13 @@ jobs:
         with:
           version: v2.14.0
 
+      - name: goreleaser check
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: check
+
   test:
     name: Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

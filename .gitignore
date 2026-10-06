@@ -35,3 +35,6 @@ go.work.sum
 # claude code
 CLAUDE.md
 .claude
+
+# GoReleaser output
+dist/
