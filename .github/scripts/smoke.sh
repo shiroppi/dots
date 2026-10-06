@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Real-binary smoke test. Usage: smoke.sh <path-to-dots-binary>
 # Never touches the real home: HOME/USERPROFILE/LOCALAPPDATA are overridden.
+# POSIX-friendly: runs on Linux, macOS, Windows (Git Bash), FreeBSD and OpenBSD.
 set -euo pipefail
 
 BIN="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
-WORK="$(mktemp -d)"
+# Explicit template: bare `mktemp -d` is not portable across BSD variants.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/dots-smoke.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 REPO="$WORK/repo"

@@ -86,6 +86,63 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
           bash .github/scripts/smoke.sh "$RUNNER_TEMP/dots${ext}"
 
+      # Interactive prompts need a pty: drive them with expect (Linux/macOS).
+      # macOS ships /usr/bin/expect; Ubuntu runners usually have it too.
+      - name: Install expect
+        if: runner.os == 'Linux'
+        run: command -v expect >/dev/null || { sudo apt-get update && sudo apt-get install -y expect; }
+
+      - name: TTY E2E (expect)
+        if: runner.os != 'Windows'
+        run: bash .github/scripts/tty-e2e.sh "$RUNNER_TEMP/dots"
+
+  # FreeBSD and OpenBSD run in QEMU VMs on an Ubuntu runner. They are slower
+  # and occasionally flaky, so no other job depends on them (never in `needs`).
+  # Go comes from the OS package; if it is older than go.mod's requirement,
+  # Go's toolchain auto-switch (GOTOOLCHAIN=auto, needs network) fetches a
+  # newer one from go.dev, which publishes freebsd/openbsd toolchains.
+  test-freebsd:
+    name: Test (FreeBSD 15.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Test in FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "15.0"
+          copyback: false
+          prepare: |
+            pkg install -y go bash
+          run: |
+            export GOTOOLCHAIN=auto
+            go version
+            go test ./...
+            go build -trimpath -o dots-ci ./cmd/dots
+            bash .github/scripts/smoke.sh ./dots-ci
+
+  test-openbsd:
+    name: Test (OpenBSD 7.9)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Test in OpenBSD
+        uses: vmactions/openbsd-vm@v1
+        with:
+          release: "7.9"
+          copyback: false
+          prepare: |
+            pkg_add go bash
+          run: |
+            export GOTOOLCHAIN=auto
+            go version
+            go test ./...
+            go build -trimpath -o dots-ci ./cmd/dots
+            bash .github/scripts/smoke.sh ./dots-ci
+
   test-min-go:
     name: Test (minimum Go 1.24, ${{ matrix.os }})
     # macOS is included because binaries linked by older Go releases fail to
