@@ -87,9 +87,10 @@ jobs:
           bash .github/scripts/smoke.sh "$RUNNER_TEMP/dots${ext}"
 
   test-min-go:
-    name: Test (minimum Go 1.22, ${{ matrix.os }})
+    name: Test (minimum Go 1.24, ${{ matrix.os }})
     # macOS is included because binaries linked by older Go releases fail to
-    # start on recent macOS (dyld: missing LC_UUID load command).
+    # start on recent macOS (dyld: missing LC_UUID load command). Go 1.24 is
+    # the first release that links darwin binaries with LC_UUID by default.
     strategy:
       fail-fast: false
       matrix:
@@ -105,7 +106,7 @@ jobs:
       - name: Set up Go (minimum supported)
         uses: actions/setup-go@v7
         with:
-          go-version: '1.22'
+          go-version: '1.24'
 
       - name: Test
         run: go test ./...
