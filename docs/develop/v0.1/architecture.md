@@ -120,7 +120,30 @@ OS固有ルールだけを持つグループは、空の親配列テーブルを
     source = "config/darwin-only"
     target = "~/.config"
 
-設定ファイルは厳密に解釈する。トップレベルのキーは dots と auto だけを許可する。auto の各要素とOS固有ルールで使えるキーは source、target、ignore、および（auto の要素のみ）OS名とする。source と target は両方指定するか、両方省略する。OS固有ルールを1つも持たない空の [[auto]] や、[auto] のような配列ではないテーブルは設定エラーとする。設定エラーは最初の1件で止めず、該当箇所（例: auto[0].darwin[1]）を付けてすべて報告する。
+設定ファイルは厳密に解釈する。トップレベルのキーは dots と auto だけを許可する。auto の各要素とOS固有ルールで使えるキーは source、target、ignore、および（auto の要素のみ）OS名とする。加えてOS固有ルールだけが、真偽値の os_only を持てる（5.2.1）。source と target は両方指定するか、両方省略する。OS固有ルールを1つも持たない空の [[auto]] や、[auto] のような配列ではないテーブルは設定エラーとする。設定エラーは最初の1件で止めず、該当箇所（例: auto[0].darwin[1]）を付けてすべて報告する。
+
+#### 5.2.1 os_only
+
+os_only は [[auto.<os>]] ルールだけに指定できる省略可能な真偽値で、省略時は false とする。true のルールのsource配下は、実行中のOSにかかわらず、共通の [[auto]] ルールでは展開しない。そのOS固有ルール自身のOSでも同じである。
+
+    [[auto]]
+    source = "config"
+    target = "~/.config"
+
+    [[auto.darwin]]
+    source = "config/darwin"
+    target = "~/.config"
+    os_only = true
+
+この例では、darwinでは auto.darwin だけが config/darwin を展開し、~/.config/karabiner/... を作る（~/.config/darwin/... は作らない）。linux、windows、freebsd では config/darwin 配下を何も配置しない。
+
+- 除外対象を集めるため、実行中でないOSの [[auto.<os>]] も os_only のsourceだけは読む。それ以外の用途では、実行中でないOSのルールは従来どおり無視する。
+- 除外は共通の [[auto]] ルールにだけ適用する。他の auto.<os> ルールや、dots・dots.<os> のエントリには影響しない。dots がこのsource配下を明示的に指していても、そのまま配置する。
+- 除外はそのルールのignoreと同じ仕組みで行う。os_only のsourceを共通ルールのsourceからの相対パスに直し、そのサブツリー全体がignoreに一致したものとして扱う。したがって、除外だけで空になったディレクトリは、ignoreで空になった場合と同じく実ディレクトリとなる（5.3 手順5）。
+- os_only のsourceは他のsourceと同様にリポジトリルートからの相対パスとして解決し、共通ルールのsourceと等しいか、その配下にある場合だけ除外する。比較は5.4の配置先と同じ正規化（windowsとdarwinでは大文字・小文字を区別しない）で行い、シンボリックリンクは解決しない。
+- 共通ルールのsource配下にない os_only のsourceは何もせず、警告も出さない。os_only のsource同士が重なる（例: config/darwin と config/darwin/karabiner）ことは許可する。
+- os_only のsourceが共通ルールのsourceと等しい場合、その共通ルールは何も展開しない。sourceは物理的に空ではないため、5.3 と同様にtarget自体が実ディレクトリとして扱われる。
+- 共通の [[auto]] に os_only を書いた場合、または真偽値以外を指定した場合は設定エラーとする（例: auto[0]: os_only is only allowed in auto.<os> rules）。
 
 ### 5.3 auto の再帰展開
 
