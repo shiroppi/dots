@@ -3,9 +3,11 @@
 # Usage: tty-e2e.sh <path-to-dots-binary>
 # Never touches the real home: HOME/XDG_* are redirected into a sandbox.
 #
-# TERM defaults to "dumb" so bubbletea skips its OSC 11 background-colour
-# query, which a pty driven by expect never answers (issue #4). Override with
-# TTY_E2E_TERM (e.g. xterm-256color) if the prompt stops rendering.
+# TERM must not be "dumb": huh switches to its accessible (numbered) prompt
+# there. With a real TERM bubbletea sends OSC 11 / CPR queries that expect's
+# pty never answers (issue #4); termenv gives up after a few seconds, so keys
+# are only sent once the prompt text has appeared. NO_COLOR keeps the TUI but
+# drops colours; cursor/OSC escapes are stripped from the capture below.
 set -euo pipefail
 
 BIN="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -28,7 +30,7 @@ TOML
 export HOME="$FAKEHOME"
 export XDG_CONFIG_HOME="$FAKEHOME/.config"
 export XDG_DATA_HOME="$FAKEHOME/.local/share"
-export TERM="${TTY_E2E_TERM:-dumb}"
+export TERM="${TTY_E2E_TERM:-xterm-256color}"
 export NO_COLOR=1
 case "$(uname -s)" in
   Darwin) BACKUPS="$FAKEHOME/Library/Application Support/dots/backups" ;;
@@ -48,7 +50,9 @@ drive() {
   local steps=$1; shift
   RC=0
   expect -f "$EXP" "$steps" "$BIN" "$@" > "$OUT.raw" 2>&1 || RC=$?
-  tr -d '\r' < "$OUT.raw" > "$OUT"
+  # Strip CR, OSC (ESC ] ... BEL|ESC \), CSI (ESC [ ... final) and other ESC
+  # sequences. perl is used because sed differs between GNU and BSD.
+  perl -pe 's/\r//g; s/\e\][^\a\e]*(?:\a|\e\\)//g; s/\e\[[0-9;?<>=!]*[ -\/]*[@-~]//g; s/\e[@-_]//g' "$OUT.raw" > "$OUT"
 }
 dump() { echo "----- captured output -----" >&2; cat "$OUT" >&2; echo "---------------------------" >&2; }
 expect_rc() { # expect_rc <label> <want>
@@ -61,7 +65,7 @@ expect_out() { # expect_out <label> <fixed string>
 # a. Conflict + replace: Enter selects "Yes - back up and replace", the
 # second Enter submits the form (the "process the rest" box stays unchecked).
 echo "old content" > "$FAKEHOME/.vimrc"
-drive '{Replace it with a link} {\r} {Process the rest} {\r}' apply
+drive '{Replace it} {\r} {Process the} {\r}' apply
 expect_rc "apply (conflict, replace)" 0
 if [ -L "$FAKEHOME/.vimrc" ]; then
   t="$(readlink "$FAKEHOME/.vimrc")"
@@ -91,7 +95,7 @@ fi
 # c. Abort: Ctrl-C at the conflict prompt -> exit 130, nothing processed.
 rm -f "$FAKEHOME/.vimrc"
 echo "keep me" > "$FAKEHOME/.vimrc"
-drive '{Replace it with a link} {\003}' apply
+drive '{Replace it} {\003}' apply
 expect_rc "apply (Ctrl-C)" 130
 expect_out "apply (Ctrl-C)" "not processed"
 if [ ! -L "$FAKEHOME/.vimrc" ] && [ "$(cat "$FAKEHOME/.vimrc")" = "keep me" ]; then

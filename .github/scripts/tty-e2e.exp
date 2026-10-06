@@ -6,7 +6,7 @@
 #          Ctrl-C). After the last step, wait for the process to exit.
 # Everything the program prints goes to stdout; the exit status is the
 # program's own. Exit 99 means a pattern never appeared (timeout).
-set timeout 20
+set timeout 30
 set steps [lindex $argv 0]
 set cmd [lrange $argv 1 end]
 
@@ -26,7 +26,7 @@ foreach {pattern key} $steps {
             exit 98
         }
     }
-    sleep 0.5
+    sleep 1
     send -- [subst -nocommands -novariables $key]
 }
 
@@ -37,5 +37,15 @@ expect {
         exit 99
     }
 }
-lassign [wait] pid spawnid os_error value
+set result [wait]
+lassign $result pid spawnid os_error value
+# Killed by a signal: [wait] is {pid id -1 errno CHILDKILLED SIGNAME desc}.
+if {[lindex $result 4] eq "CHILDKILLED"} {
+    set sig [lindex $result 5]
+    puts "
+\[tty-e2e\] process killed by $sig"
+    array set signo {SIGHUP 1 SIGINT 2 SIGQUIT 3 SIGKILL 9 SIGSEGV 11 SIGPIPE 13 SIGTERM 15}
+    if {[info exists signo($sig)]} { exit [expr {128 + $signo($sig)}] }
+    exit 97
+}
 exit $value
