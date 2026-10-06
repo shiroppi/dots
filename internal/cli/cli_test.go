@@ -543,8 +543,8 @@ func TestRestore(t *testing.T) {
 		t.Errorf("want 1, got %d", c)
 	}
 
-	if c := te.run("restore"); c != 1 {
-		t.Errorf("want 1, got %d", c)
+	if c := te.run("restore"); c != 2 {
+		t.Errorf("want 2, got %d", c)
 	}
 
 	te.app.Interactive = false
@@ -778,8 +778,8 @@ func TestUsageErrors(t *testing.T) {
 		{"apply", "extra"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			if code := te.run(args...); code != 1 {
-				t.Errorf("want 1, got %d", code)
+			if code := te.run(args...); code != 2 {
+				t.Errorf("want 2, got %d", code)
 			}
 			errStr := te.errOut.String()
 			if !strings.HasSuffix(errStr, "Run \"dots --help\" for usage.\n") {

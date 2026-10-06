@@ -54,23 +54,44 @@ type silentError struct{}
 func (silentError) Error() string { return "exit status 1" }
 
 // usageError marks a command-line usage mistake (unknown command, bad flag,
-// wrong arguments); ExitCode appends a pointer to --help for it.
+// wrong arguments); ExitCode appends a pointer to --help for it and exits 2.
 type usageError struct{ err error }
 
 func (u usageError) Error() string { return u.err.Error() }
 func (u usageError) Unwrap() error { return u.err }
 
+// Process exit codes.
+const (
+	exitFailure = 1   // failure or problems detected
+	exitUsage   = 2   // command-line usage error
+	exitAborted = 130 // a confirmation prompt ended without an answer
+)
+
+// exitCodeFor classifies a non-nil error: 130 when a prompt was aborted, else
+// 2 for a usage error, else 1. It looks through wrapping, joins and
+// apply.PartialError.
+func exitCodeFor(err error) int {
+	var u usageError
+	switch {
+	case errors.Is(err, ui.ErrAborted):
+		return exitAborted
+	case errors.As(err, &u):
+		return exitUsage
+	}
+	return exitFailure
+}
+
 // ExitCode maps the error returned by a command to a process exit code and
 // prints it to stderr as `dots: <message>` (one line per joined error). A nil
 // error yields 0; a silent error (output already printed) yields 1 without
-// printing anything.
+// printing anything. Other codes are chosen by exitCodeFor.
 func ExitCode(err error, stderr io.Writer) int {
 	if err == nil {
 		return 0
 	}
 	var s silentError
 	if errors.As(err, &s) {
-		return 1
+		return exitFailure
 	}
 	hint := false
 	for _, e := range ui.Flatten(err) {
@@ -83,7 +104,7 @@ func ExitCode(err error, stderr io.Writer) int {
 	if hint {
 		fmt.Fprintln(stderr, `Run "dots --help" for usage.`)
 	}
-	return 1
+	return exitCodeFor(err)
 }
 
 func (a *App) printer() *ui.Printer {
