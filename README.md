@@ -37,11 +37,13 @@ ignore = ["README.md", "**/.DS_Store"]
 [[auto.darwin]]
 source = "config/darwin"
 target = "~/.config"
+os_only = true
 ```
 
 * `dots` — Map individual files or directories.
 * `auto` — Recursively map a directory while preserving its structure.
 * `[os]` — Define OS-specific configuration. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`)
+* `os_only` — Only in `auto.[os]` rules. The rule's `source` is never deployed by the common `auto` rules on any OS, so `config/darwin` above ends up only in `~/.config` on macOS.
 * `ignore` — Skip paths inside an `auto` source. Patterns are relative to `source`, use `/` on every OS, and are case-sensitive.
   * `README.md` matches only the top-level `README.md`.
   * `*` matches within a single path element and never crosses `/`.
@@ -86,7 +88,7 @@ When multiple rules target the same path, the highest-priority rule is used. Rul
 go install github.com/shiroppi/dots/cmd/dots@latest
 ```
 
-*Requires Go 1.22 or later.*
+*Requires Go 1.24 or later.*
 
 ## Quick Start
 
