@@ -147,7 +147,8 @@ jobs:
           freebsd/arm64
           freebsd/riscv64
           openbsd/amd64
-          netbsd/amd64
+          openbsd/arm64
+          openbsd/riscv64
           "
           mkdir -p dist
           for t in $targets; do
