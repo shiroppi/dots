@@ -1,0 +1,28 @@
+Six existing items collide with the basic repository; one is already linked.
+
+Home before apply:
+  ~/.vimrc                  regular file
+  ~/.config/tmux            directory with files
+  ~/.zshrc                  symlink to ~/.zshrc.mine
+  ~/.gitconfig              broken symlink
+  ~/.config/nvim            old link to config/nvim (now overridden by [dots])
+  ~/.local/bin/hello        regular file
+  ~/.config/starship.toml   already the right link (skipped)
+
+Try:
+  dots doctor              exit 1: 6 conflicts (!), the rest missing or ok
+  dots apply --dry-run     6 conflicts listed; nothing changes
+  dots apply < /dev/null   no TTY: exits without changing anything
+  dots apply               prompt: select only some of the 6, confirm
+  dots apply               again: only the ones you skipped are offered
+  ls ~/.local/share/dots/backups
+  dots restore --dry-run ~/.local/share/dots/backups/<archive>
+  dots restore ~/.local/share/dots/backups/<archive>
+                           the target is a dots link now: restore asks first
+  XDG_DATA_HOME=relative dots apply
+                           invalid backup directory: error before any change
+
+Check:
+  - Each replaced item is in a backup archive; restore brings back the
+    original file, directory or symlink (broken one included).
+  - Ctrl-C at the prompt exits 130 and changes nothing.

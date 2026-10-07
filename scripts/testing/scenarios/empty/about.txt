@@ -1,0 +1,9 @@
+Empty repository directory and empty home: start from dots init.
+
+Try:
+  dots doctor   exit 1: no dots.toml found
+  dots init     creates dots.toml
+  dots init     again: refuses to overwrite
+  dots edit     opens it in $EDITOR
+  mkdir -p config/tmux && echo x > config/tmux/tmux.conf
+  dots apply

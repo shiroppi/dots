@@ -1,0 +1,1 @@
+-- repo: config/nvim/init.lua (loses to [dots] "~/.config/nvim")

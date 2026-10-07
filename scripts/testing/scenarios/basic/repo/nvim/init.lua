@@ -1,0 +1,1 @@
+-- repo: nvim/init.lua (wins over config/nvim via [dots])

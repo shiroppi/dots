@@ -1,0 +1,72 @@
+# Scenario "resolve-errors": the file parses, but expanding the rules for this
+# OS fails. All problems are reported together.
+
+[dots]
+# Same target after normalisation, same priority ("~/./.vimrc" == "~/.vimrc").
+"~/.vimrc" = "vimrc"
+"~/./.vimrc" = "vimrc"
+"~/.vimrc/" = "vimrc"
+# Parent/child: a target inside another managed target.
+"~/.config/alacritty" = "alacritty"
+"~/.config/alacritty/alacritty.toml" = "alacritty/alacritty.toml"
+# auto[0] links ~/.config/nvim as a whole; this is inside it.
+"~/.config/nvim/lua" = "a/nvim"
+# The home directory and the repository root cannot be links.
+"~" = "vimrc"
+"." = "vimrc"
+# Higher priority than the duplicate auto rules below, so ~/.config/wezterm
+# is NOT an error: dots wins and auto[0] and auto[1] are just overridden.
+"~/.config/wezterm" = "a/wezterm"
+
+[dots.linux]
+"~/.gitconfig" = "vimrc"
+"~/./.gitconfig" = "vimrc"
+
+# Three auto rules give the same target ~/.config/nvim (3-way duplicate) and
+# two of them give ~/.config/wezterm (resolved by [dots] above).
+[[auto]]
+source = "a"
+target = "~/.config"
+ignore = ["linux"]
+
+[[auto]]
+source = "b"
+target = "~/.config"
+
+[[auto]]
+source = "c"
+target = "~/.config"
+
+# Two auto.linux rules with the same priority give ~/.config/git.
+[[auto.linux]]
+source = "os1"
+target = "~/.config"
+
+[[auto.linux]]
+source = "os2"
+target = "~/.config"
+
+# os_only nested two levels below auto[3]'s source: a/linux/deep would still
+# be linked through d/ on every OS.
+[[auto]]
+source = "a/linux"
+target = "~/.local/share/a"
+
+[[auto.linux]]
+source = "a/linux/deep/x"
+target = "~/.local/share/x"
+os_only = true
+
+# Auto sources that are missing, a file, or contain unusable items.
+[[auto]]
+source = "missing"
+target = "~/.missing"
+
+[[auto]]
+source = "not-a-dir"
+target = "~/.not-a-dir"
+
+[[auto]]
+source = "special"
+target = "~/.special"
+ignore = ["README"]

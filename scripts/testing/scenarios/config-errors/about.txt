@@ -1,0 +1,11 @@
+dots.toml is valid TOML but breaks almost every validation rule.
+
+Try:
+  dots doctor           exit 1: every problem listed at once, with its location
+  dots apply            same errors; nothing is created
+  dots apply --dry-run  same errors
+  dots edit             fix one entry, rerun doctor, watch the list shrink
+
+Check:
+  - Each message names the key (dots."~/.number", auto[0].ignore[3], ...).
+  - No partial result: not a single link is created.

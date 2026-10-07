@@ -1,0 +1,5 @@
+# Scenario "syntax-error": the TOML itself is broken (line 5).
+
+[dots]
+"~/.vimrc" = "vimrc"
+"~/.gitconfig = "gitconfig"

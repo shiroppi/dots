@@ -1,0 +1,19 @@
+dots.toml parses, but expanding it fails: duplicates, nesting, bad sources.
+
+Try:
+  dots doctor   exit 1: all problems at once
+  dots apply    same; nothing is created
+
+Expect:
+  - duplicate ~/.vimrc        (3 spellings of one path in [dots])
+  - duplicate ~/.gitconfig    ([dots.linux])
+  - duplicate ~/.config/nvim  (auto[0], auto[1], auto[2]: three-way)
+  - duplicate ~/.config/git   (two [[auto.linux]] rules)
+  - NO error for ~/.config/wezterm: [dots] outranks the duplicate auto rules
+  - ~/.config/alacritty/alacritty.toml inside ~/.config/alacritty
+  - ~/.config/nvim/lua inside ~/.config/nvim (only reported if nvim resolves;
+    remove auto[1] and auto[2] to see it)
+  - "~" and "." cannot be links
+  - os_only source nested too deep (auto[3].linux[0])
+  - auto source missing / a file
+  - broken symlink, symlink loop and FIFO inside an auto source

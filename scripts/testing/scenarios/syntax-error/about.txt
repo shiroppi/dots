@@ -1,0 +1,5 @@
+dots.toml has a TOML syntax error (an unclosed quote on line 5).
+
+Try:
+  dots doctor   exit 1: line and column of the error
+  dots apply    same; nothing is created

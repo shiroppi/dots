@@ -1,0 +1,19 @@
+Happy path: overrides, ignore patterns, os_only, two auto rules. Empty home.
+
+Try:
+  dots doctor            exit 1: every target is missing (×); overrides are listed
+  dots apply --dry-run   everything is "+" (create); nothing changes
+  dots apply             exit 0, no prompt
+  dots apply             second run: everything is already linked (idempotent)
+  dots doctor            exit 0
+  ls -la ~ ~/.config ~/.local/bin build
+
+Check:
+  - ~/.config/starship.toml -> starship/linux.toml; dots, auto.linux and auto
+    are shown as overridden (four rules, one target).
+  - ~/.config/nvim -> nvim (not config/nvim); ~/.config/htop -> config/linux/htop.
+  - Not linked: README.md, .DS_Store, notes.bak, tmp-cache, draft-wezterm.toml,
+    linux/, darwin/. Linked: OLD.BAK (ignore is case-sensitive), .hidden-rc,
+    "my app" (space in the name), foot (from config/linux).
+  - All links are relative (readlink ~/.vimrc).
+  - repo/build/vimrc is a link inside the repository.

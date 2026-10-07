@@ -1,0 +1,49 @@
+# Scenario "basic": every rule resolves; nothing exists in the fake home yet.
+# Written for Linux (WSL included). On macOS the darwin rules apply instead.
+
+[dots]
+"~/.vimrc" = "vimrc"
+"~/.gitconfig" = "gitconfig"
+"~/.zshrc" = "zsh/zshrc"
+# dots > auto: overrides config/nvim from auto[0].
+"~/.config/nvim" = "nvim"
+# One of four rules for ~/.config/starship.toml (dots.linux wins on Linux).
+"~/.config/starship.toml" = "starship/common.toml"
+# No "~": the target is relative to the repository root, so the link is
+# created inside the repository (repo/build/vimrc). build/ does not exist yet.
+"build/vimrc" = "vimrc"
+
+[dots.linux]
+# dots.<os> > dots
+"~/.gitconfig" = "gitconfig.linux"
+"~/.config/starship.toml" = "starship/linux.toml"
+
+[dots.darwin]
+"~/.gitconfig" = "gitconfig.darwin"
+"~/Library/Application Support/dots-example/settings.json" = "config/my app/settings.json"
+
+[dots.windows]
+"~/AppData/Local/nvim" = "nvim"
+
+[[auto]]
+source = "config"
+target = "~/.config"
+# Exact names, a prefix, a suffix and a wildcard in the middle.
+ignore = ["README.md", ".DS_Store", "*.bak", "tmp-*", "draft*.toml"]
+
+# os_only: config/linux and config/darwin are removed from auto[0] on every
+# OS, and each is linked only on its own OS.
+[[auto.linux]]
+source = "config/linux"
+target = "~/.config"
+os_only = true
+
+[[auto.darwin]]
+source = "config/darwin"
+target = "~/.config"
+os_only = true
+
+# A second auto rule whose items are files.
+[[auto]]
+source = "local/bin"
+target = "~/.local/bin"

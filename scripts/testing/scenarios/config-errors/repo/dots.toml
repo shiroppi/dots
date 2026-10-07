@@ -1,0 +1,57 @@
+# Scenario "config-errors": valid TOML, but almost every key breaks a rule.
+# dots reports all of them at once, sorted, before touching anything.
+
+# Unknown top-level key.
+[settings]
+color = true
+
+[dots]
+# Not a string.
+"~/.number" = 1
+# Absolute paths, drive letters, UNC, environment variables, backslashes.
+"/etc/dots-test" = "vimrc"
+"C:/Users/me/.vimrc" = "vimrc"
+"//server/share/.vimrc" = "vimrc"
+"$HOME/.vimrc" = "vimrc"
+"%APPDATA%/vimrc" = "vimrc"
+"~\\.vimrc" = "vimrc"
+# Sources that leave the repository or are absolute.
+"~/.escape" = "../outside"
+"~/.abs" = "/etc/passwd"
+"~/.empty" = ""
+
+# Unknown OS name (macOS is "darwin").
+[dots.macos]
+"~/.vimrc" = "vimrc"
+
+[[auto]]
+source = "config"
+target = "~/.config"
+# os_only is allowed only in [[auto.<os>]].
+os_only = true
+# Every invalid ignore form.
+ignore = ["", ".", "..", "sub/dir", "back\\slash", "**", "?.bak", "[ab]", "{a,b}"]
+# Unknown key (typo of "ignore").
+ignores = ["README.md"]
+
+[[auto.linux]]
+source = "config"
+target = "~/.config"
+os_only = "yes"
+unknown = 1
+
+# [auto.darwin] instead of [[auto.darwin]].
+[auto.darwin]
+source = "config"
+target = "~/.config"
+
+[[auto]]
+# Missing target.
+source = "config"
+
+[[auto]]
+# ignore without source/target.
+ignore = ["x"]
+
+# Empty group.
+[[auto]]

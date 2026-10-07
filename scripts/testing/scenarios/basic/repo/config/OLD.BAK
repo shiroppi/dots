@@ -1,0 +1,1 @@
+linked: ignore is case-sensitive, so "*.bak" does not match OLD.BAK

@@ -1,0 +1,24 @@
+# Scenario "plan-errors": the rules resolve, but some targets or sources are
+# unusable on disk. apply refuses to start; doctor reports each one.
+
+[dots]
+# Fine on their own: they show that apply changes nothing when any entry fails.
+"~/.vimrc" = "vimrc"
+"~/.config/nvim" = "nvim"
+
+# Source problems.
+"~/.missing" = "does-not-exist"
+"~/.broken" = "broken-link"
+"~/.fifo-source" = "fifo"
+
+# Parent problems (setup.sh creates ~/.blocker as a file and ~/.linkdir as a symlink).
+"~/.blocker/child" = "vimrc"
+"~/.linkdir/child" = "vimrc"
+
+# Target problem: a FIFO already sits at the target.
+"~/.fifo-target" = "vimrc"
+
+# Overlap between source and target (repository-relative targets).
+"vimrc-self" = "vimrc-self"
+"nvim/inner" = "nvim"
+"pack" = "pack/a"
