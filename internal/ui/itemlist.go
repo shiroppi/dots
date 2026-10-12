@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/mattn/go-runewidth"
@@ -17,6 +18,10 @@ const arrow = "←"
 type itemList struct {
 	p     *Printer
 	lines []listLine
+	// grouped makes flush order the item blocks (an item and its detail
+	// lines) by outcome: ok, created, replaced, then everything else. The
+	// order inside a group is kept.
+	grouped bool
 }
 
 type listLine struct {
@@ -25,6 +30,8 @@ type listLine struct {
 	src    string // source shown after the arrow
 	srcW   int
 	hasSrc bool
+	rank   int  // outcome group of the item this line belongs to
+	isItem bool // first line of an item block
 }
 
 func (p *Printer) newList() *itemList { return &itemList{p: p} }
@@ -38,8 +45,10 @@ func (l *itemList) item(t tone, sym, word string, e model.Entry, withSource bool
 	}
 	target := l.p.display(e.Target)
 	ln := listLine{
-		head:  itemIndent + l.p.paint(t, mark) + " " + target,
-		headW: textWidth(itemIndent + mark + " " + target),
+		head:   itemIndent + l.p.paint(t, mark) + " " + target,
+		headW:  textWidth(itemIndent + mark + " " + target),
+		rank:   symbolRank(sym),
+		isItem: true,
 	}
 	if withSource {
 		ln.hasSrc = true
@@ -51,7 +60,11 @@ func (l *itemList) item(t tone, sym, word string, e model.Entry, withSource bool
 
 // detail adds one line indented under its item.
 func (l *itemList) detail(t tone, text string) {
-	l.lines = append(l.lines, listLine{head: detailIndent + l.p.paint(t, text), headW: textWidth(detailIndent + text)})
+	rank := 0
+	if n := len(l.lines); n > 0 {
+		rank = l.lines[n-1].rank
+	}
+	l.lines = append(l.lines, listLine{head: detailIndent + l.p.paint(t, text), headW: textWidth(detailIndent + text), rank: rank})
 }
 
 // errorDetails adds every leaf of err as a detail line.
@@ -63,6 +76,9 @@ func (l *itemList) errorDetails(err error) {
 
 // flush prints the buffered lines.
 func (l *itemList) flush() {
+	if l.grouped {
+		l.sortBlocks()
+	}
 	var heads, srcs []int
 	for _, ln := range l.lines {
 		if ln.hasSrc {
@@ -79,6 +95,35 @@ func (l *itemList) flush() {
 		}
 		l.p.printf("%s%s%s\n", ln.head, strings.Repeat(" ", pads[i]), l.p.paint(toneDim, arrow+" "+ln.src))
 		i++
+	}
+}
+
+// symbolRank is the position of a symbol's group in a grouped list.
+func symbolRank(sym string) int {
+	switch sym {
+	case symOK:
+		return 0
+	case symCreate:
+		return 1
+	case symReplace:
+		return 2
+	}
+	return 3
+}
+
+// sortBlocks stably orders item blocks by rank.
+func (l *itemList) sortBlocks() {
+	var blocks [][]listLine
+	for _, ln := range l.lines {
+		if ln.isItem || len(blocks) == 0 {
+			blocks = append(blocks, nil)
+		}
+		blocks[len(blocks)-1] = append(blocks[len(blocks)-1], ln)
+	}
+	slices.SortStableFunc(blocks, func(a, b []listLine) int { return a[0].rank - b[0].rank })
+	l.lines = nil
+	for _, b := range blocks {
+		l.lines = append(l.lines, b...)
 	}
 }
 
