@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -21,6 +22,7 @@ import (
 	"github.com/shiroppi/dots/internal/model"
 	"github.com/shiroppi/dots/internal/platform"
 	"github.com/shiroppi/dots/internal/resolve"
+	"github.com/shiroppi/dots/internal/statefile"
 	"github.com/shiroppi/dots/internal/ui"
 )
 
@@ -45,6 +47,10 @@ type App struct {
 	BackupDir string
 	// RunEditor runs the editor attached to the terminal.
 	RunEditor func(argv []string) error
+	// StatePath overrides statefile.DefaultPath(Env) when non-empty.
+	StatePath string
+	// Now returns the current time; nil means time.Now.
+	Now func() time.Time
 }
 
 // silentError is returned when the output was already printed and only the
@@ -140,6 +146,52 @@ func (a *App) store() (*backup.Store, error) {
 		dir = d
 	}
 	return &backup.Store{FS: a.FS, Dir: dir}, nil
+}
+
+// stateStore builds the state file store; the path is computed only when
+// needed.
+func (a *App) stateStore() (*statefile.Store, error) {
+	path := a.StatePath
+	if path == "" {
+		p, err := statefile.DefaultPath(a.Env)
+		if err != nil {
+			return nil, err
+		}
+		path = p
+	}
+	return &statefile.Store{FS: a.FS, Path: path, GOOS: a.Env.GOOS}, nil
+}
+
+func (a *App) now() time.Time {
+	if a.Now != nil {
+		return a.Now()
+	}
+	return time.Now()
+}
+
+// updateState records the links rep created or confirmed and drops records of
+// vanished targets (spec §5.3). loadErr is the result of Load before the
+// plan ran. A broken state file is moved aside first and reported on stderr.
+// A failure is returned as a warning and never undoes any link.
+func (a *App) updateState(pr *ui.Printer, store *statefile.Store, st *statefile.State, loadErr error, rep *apply.Report, root string) error {
+	broken := errors.Is(loadErr, statefile.ErrBroken)
+	if loadErr != nil && !broken {
+		return fmt.Errorf("warning: state was not updated: %w", loadErr)
+	}
+	if !apply.UpdateState(a.FS, st, rep, root, a.now()) && !broken {
+		return nil
+	}
+	if broken {
+		dest, err := store.MoveAside(a.now())
+		if err != nil {
+			return fmt.Errorf("warning: state was not updated: %w", err)
+		}
+		fmt.Fprintf(a.Stderr, "warning: %s\n         moved it to %s and started a new one\n", pr.DisplayText(loadErr.Error()), pr.Display(dest))
+	}
+	if err := store.Save(st); err != nil {
+		return fmt.Errorf("warning: cannot update state file %s: %w", pr.Display(store.Path), err)
+	}
+	return nil
 }
 
 // load finds, parses and resolves dots.toml starting from Cwd.
@@ -333,6 +385,16 @@ func newApplyCmd(app *App) *cobra.Command {
 				fmt.Fprintln(app.Stdout, "Nothing to do: dots.toml defines no links.")
 				return nil
 			}
+			// State problems must surface before any link changes.
+			store, storeErr := app.stateStore()
+			var st *statefile.State
+			var loadErr error
+			if storeErr == nil {
+				st, loadErr = store.Load()
+				if errors.Is(loadErr, statefile.ErrNewerVersion) {
+					return pr.WrapError(fmt.Errorf("%w; refusing to change anything", loadErr))
+				}
+			}
 			opts := apply.Options{}
 			if app.Interactive && app.Prompter != nil {
 				opts.Prompter = app.Prompter
@@ -353,10 +415,13 @@ func newApplyCmd(app *App) *cobra.Command {
 				return pr.WrapError(err)
 			}
 			pr.Report(rep)
-			if err != nil {
-				return pr.WrapError(err)
+			var stateErr error
+			if storeErr != nil {
+				stateErr = fmt.Errorf("warning: state was not updated: %w", storeErr)
+			} else {
+				stateErr = app.updateState(pr, store, st, loadErr, rep, res.Root)
 			}
-			return nil
+			return pr.WrapError(errors.Join(err, stateErr))
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without changing anything")

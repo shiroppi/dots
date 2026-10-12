@@ -108,6 +108,7 @@ func setupEnv(t *testing.T) *testEnv {
 		Interactive: false,
 		Color:       false,
 		BackupDir:   p("backup"),
+		StatePath:   p("state", "state.json"),
 		RunEditor: func(argv []string) error {
 			te.editor = argv
 			return nil
