@@ -69,6 +69,9 @@ os_only = true
 
 This is just an example. Use any directory structure you like.
 
+I use dots to manage my dotfiles.
+If you'd like to see another configuration example, check out [my dotfiles](https://github.com/shiroppi/dotfiles)!
+
 ### Priority
 
 ```
