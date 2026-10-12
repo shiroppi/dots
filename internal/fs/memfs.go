@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-git/go-billy/v5"
@@ -263,12 +264,29 @@ func (m *memManager) OpenFile(name string, flag int, perm FileMode) (File, error
 }
 
 func (m *memManager) Rename(oldpath, newpath string) error {
+	return m.rename(oldpath, newpath, false)
+}
+
+func (m *memManager) ReplaceFile(oldpath, newpath string) error {
+	return m.rename(oldpath, newpath, true)
+}
+
+func (m *memManager) rename(oldpath, newpath string, replace bool) error {
 	from, to := clean(oldpath), clean(newpath)
 	if _, err := m.b.Lstat(from); err != nil {
 		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: ErrNotExist}
 	}
-	if _, err := m.b.Lstat(to); err == nil {
-		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: ErrExist}
+	if dst, err := m.b.Lstat(to); err == nil {
+		switch {
+		case !replace:
+			return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: ErrExist}
+		case dst.IsDir():
+			return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EISDIR}
+		case from != to:
+			if err := m.RemoveAll(to); err != nil {
+				return err
+			}
+		}
 	}
 	if from == to {
 		return nil

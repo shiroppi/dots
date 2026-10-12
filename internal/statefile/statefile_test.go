@@ -1,6 +1,7 @@
 package statefile
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"runtime"
@@ -176,6 +177,63 @@ func TestLoadIgnoresUnknownKeys(t *testing.T) {
 	mustNil(t, err)
 	if len(st.Links) != 1 || st.Links[0].Target != "/t" {
 		t.Fatalf("got %v", st.Links)
+	}
+}
+
+func TestSavePreservesUnknownKeys(t *testing.T) {
+	s, m := newStore("linux")
+	mustNil(t, m.MkdirAll(filepath.Dir(s.Path), 0o700))
+	doc := `{"version":1,"links":[],"future":true,"copies":[{"x":"a&b","n":1}]}`
+	mustNil(t, fs.WriteFile(m, s.Path, []byte(doc), 0o600))
+	st, err := s.Load()
+	mustNil(t, err)
+	st.Record(link("/t", "l"))
+	mustNil(t, s.Save(st))
+
+	data, err := fs.ReadFile(m, s.Path)
+	mustNil(t, err)
+	var top map[string]json.RawMessage
+	mustNil(t, json.Unmarshal(data, &top))
+	if string(top["future"]) != "true" {
+		t.Errorf("future = %s", top["future"])
+	}
+	var copies []map[string]any
+	mustNil(t, json.Unmarshal(top["copies"], &copies))
+	if len(copies) != 1 || copies[0]["x"] != "a&b" || copies[0]["n"] != float64(1) {
+		t.Errorf("copies = %s", top["copies"])
+	}
+	if !strings.HasPrefix(string(data), "{\n  \"version\": 1,\n  \"links\": [") {
+		t.Errorf("version and links should come first:\n%s", data)
+	}
+	back, err := s.Load()
+	mustNil(t, err)
+	if len(back.Links) != 1 {
+		t.Fatalf("links = %v", back.Links)
+	}
+	// Saving a fresh state does not invent keys.
+	mustNil(t, s.Save(&State{}))
+	data, _ = fs.ReadFile(m, s.Path)
+	if strings.Contains(string(data), "future") {
+		t.Errorf("unexpected key in a fresh state:\n%s", data)
+	}
+}
+
+func TestSaveReplacesExistingAtomically(t *testing.T) {
+	s, m := newStore("linux")
+	for i := 0; i < 3; i++ {
+		st := &State{}
+		st.Record(link(p("t", string(rune('a'+i))), "l"))
+		mustNil(t, s.Save(st))
+	}
+	back, err := s.Load()
+	mustNil(t, err)
+	if len(back.Links) != 1 || back.Links[0].Target != p("t", "c") {
+		t.Fatalf("got %v", back.Links)
+	}
+	infos, err := m.ReadDir(filepath.Dir(s.Path))
+	mustNil(t, err)
+	if len(infos) != 1 {
+		t.Errorf("leftover files in the state directory: %v", infos)
 	}
 }
 

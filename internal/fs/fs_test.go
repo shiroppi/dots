@@ -170,3 +170,51 @@ func TestOSStatLinkLoop(t *testing.T) {
 		t.Fatalf("original PathError not inspectable: %v", err)
 	}
 }
+
+func TestReplaceFile(t *testing.T) {
+	for name, c := range managers(t) {
+		t.Run(name, func(t *testing.T) {
+			m, root := c.m, c.root
+			write := func(n, s string) string {
+				p := filepath.Join(root, n)
+				if err := dfs.WriteFile(m, p, []byte(s), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				return p
+			}
+			src, dst := write("new", "new"), write("old", "old")
+			if err := m.Rename(src, dst); !errors.Is(err, dfs.ErrExist) {
+				t.Fatalf("Rename onto existing: %v, want ErrExist", err)
+			}
+			if err := m.ReplaceFile(src, dst); err != nil {
+				t.Fatalf("ReplaceFile: %v", err)
+			}
+			if data, err := dfs.ReadFile(m, dst); err != nil || string(data) != "new" {
+				t.Fatalf("content %q, %v", data, err)
+			}
+			if ok, _ := dfs.Exists(m, src); ok {
+				t.Error("source still exists")
+			}
+			// A missing destination works like Rename.
+			src2 := write("second", "2")
+			fresh := filepath.Join(root, "fresh")
+			if err := m.ReplaceFile(src2, fresh); err != nil {
+				t.Fatalf("ReplaceFile to new path: %v", err)
+			}
+			// A directory destination is refused and left alone.
+			dir := filepath.Join(root, "dir")
+			if err := m.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := m.ReplaceFile(fresh, dir); err == nil {
+				t.Fatal("ReplaceFile onto a directory should fail")
+			}
+			if ok, _ := dfs.Exists(m, fresh); !ok {
+				t.Error("source lost after a refused ReplaceFile")
+			}
+			if err := m.ReplaceFile(filepath.Join(root, "missing"), dst); !errors.Is(err, dfs.ErrNotExist) {
+				t.Fatalf("missing source: %v", err)
+			}
+		})
+	}
+}

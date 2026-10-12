@@ -66,6 +66,10 @@ type Manager interface {
 	// Rename moves an item (file, directory tree, or symlink) to a new path.
 	// The destination must not exist.
 	Rename(oldpath, newpath string) error
+	// ReplaceFile is Rename for a non-directory item that may overwrite an
+	// existing non-directory destination atomically, so a reader sees either
+	// the old or the new item. A directory destination is an error.
+	ReplaceFile(oldpath, newpath string) error
 	// Remove deletes a file, a symlink, or an empty directory.
 	Remove(name string) error
 	// RemoveAll deletes path and any children. A missing path is not an error.
