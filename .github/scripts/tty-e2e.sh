@@ -3,11 +3,10 @@
 # Usage: tty-e2e.sh <path-to-dots-binary>
 # Never touches the real home: HOME/XDG_* are redirected into a sandbox.
 #
-# TERM must not be "dumb": huh switches to its accessible (numbered) prompt
-# there. With a real TERM bubbletea sends OSC 11 / CPR queries that expect's
-# pty never answers (issue #4); termenv gives up after a few seconds, so keys
-# are only sent once the prompt text has appeared. NO_COLOR keeps the TUI but
+# The prompt is a bubbletea v2 program: it does not query the terminal, so
+# keys can be sent as soon as the prompt text has appeared (issue #4). NO_COLOR
 # drops colours; cursor/OSC escapes are stripped from the capture below.
+# Keys: "\033\[A" Up, "\033\[B" Down, "\040" Space, "\r" Enter, "\003" Ctrl-C.
 set -euo pipefail
 
 BIN="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
@@ -62,11 +61,12 @@ expect_out() { # expect_out <label> <fixed string>
   if grep -qF -- "$2" "$OUT"; then pass "$1 output has '$2'"; else fail "$1 output lacks '$2'"; dump; fi
 }
 
-# a. Conflict + replace: Enter selects "Yes - back up and replace", the
-# second Enter submits the form (the "process the rest" box stays unchecked).
+# a. Conflict + replace: the cursor starts on "No - skip", Up moves to
+# "Yes - back up and replace", Enter confirms (the checkbox stays off).
 echo "old content" > "$FAKEHOME/.vimrc"
-drive '{Replace it} {\r} {Process the} {\r}' apply
+drive '{Replace it} {\033\[A} {} {\r}' apply
 expect_rc "apply (conflict, replace)" 0
+expect_out "apply (conflict, replace)" "? ~/.vimrc  Yes – back up and replace"
 if [ -L "$FAKEHOME/.vimrc" ]; then
   t="$(readlink "$FAKEHOME/.vimrc")"
   case "$t" in
@@ -80,10 +80,10 @@ ARCHIVE="$(ls "$BACKUPS"/*.tar.gz 2>/dev/null | head -n 1 || true)"
 if [ -n "$ARCHIVE" ]; then pass "backup archive: $ARCHIVE"; else fail "no backup archive in $BACKUPS"; dump; fi
 if grep -qE '~ +~/\.vimrc' "$OUT"; then pass "output has the replace (~) line"; else fail "output lacks the replace (~) line"; dump; fi
 
-# b. Restore over the existing link: first choice is "Back up current
-# content and restore".
+# b. Restore over the existing link.
 if [ -n "$ARCHIVE" ]; then
-  drive '{over it} {\r}' restore "$ARCHIVE"
+  # The cursor starts on "Skip": Up moves to "Back up current content and restore".
+  drive '{over it} {\033\[A} {} {\r}' restore "$ARCHIVE"
   expect_rc "restore" 0
   if [ ! -L "$FAKEHOME/.vimrc" ] && [ "$(cat "$FAKEHOME/.vimrc" 2>/dev/null)" = "old content" ]; then
     pass "restored content is back"
@@ -102,6 +102,38 @@ if [ ! -L "$FAKEHOME/.vimrc" ] && [ "$(cat "$FAKEHOME/.vimrc")" = "keep me" ]; t
   pass "aborted apply left the file untouched"
 else
   fail "aborted apply changed the file"
+fi
+
+# d. Enter on the initial cursor changes nothing (No - skip).
+rm -f "$FAKEHOME/.vimrc"
+echo "keep me" > "$FAKEHOME/.vimrc"
+drive '{Replace it} {\r}' apply
+expect_rc "apply (Enter on default)" 0
+expect_out "apply (Enter on default)" "? ~/.vimrc  No – skip"
+if [ ! -L "$FAKEHOME/.vimrc" ] && [ "$(cat "$FAKEHOME/.vimrc")" = "keep me" ]; then
+  pass "default answer left the file untouched"
+else
+  fail "default answer changed the file"
+fi
+
+# e. Checkbox: Down reaches "Process the rest", Space ticks it, Up twice
+# moves to Yes, Enter confirms -> Yes to All: one prompt for two conflicts.
+echo "set gui" > "$REPO/gvimrc"
+cat >> "$REPO/dots.toml" <<'TOML'
+"~/.gvimrc" = "gvimrc"
+TOML
+rm -f "$FAKEHOME/.vimrc"
+echo "old vimrc" > "$FAKEHOME/.vimrc"
+echo "old gvimrc" > "$FAKEHOME/.gvimrc"
+drive '{Replace it} {\033\[B} {} {\040} {} {\033\[A} {} {\033\[A} {} {\r}' apply
+expect_rc "apply (Yes to All)" 0
+expect_out "apply (Yes to All)" "[x]"
+expect_out "apply (Yes to All)" "(and the rest)"
+if [ "$(grep -c 'Replace it' "$OUT")" -eq 1 ]; then pass "asked only once"; else fail "asked $(grep -c 'Replace it' "$OUT") times, want 1"; dump; fi
+if [ -L "$FAKEHOME/.vimrc" ] && [ -L "$FAKEHOME/.gvimrc" ]; then
+  pass "both conflicts replaced"
+else
+  fail "not both links were created"; dump
 fi
 
 if [ "$FAILED" -ne 0 ]; then echo "tty-e2e FAILED" >&2; exit 1; fi

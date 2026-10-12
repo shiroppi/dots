@@ -3,7 +3,10 @@
 # Usage: tty-e2e.exp <steps> <command> [args...]
 #   steps: Tcl list of {pattern key} pairs (flat). For each pair, wait for the
 #          regexp, pause briefly, then send the key ("\r" = Enter, "\003" =
-#          Ctrl-C). After the last step, wait for the process to exit.
+#          Ctrl-C, "\033\[A" = Up, "\033\[B" = Down, "\040" = Space). An
+#          empty pattern skips the wait: the prompt redraws only the rows that
+#          changed, so there is nothing reliable to wait for between moves.
+#          After the last step, wait for the process to exit.
 # Everything the program prints goes to stdout; the exit status is the
 # program's own. Exit 99 means a pattern never appeared (timeout).
 set timeout 30
@@ -15,6 +18,11 @@ spawn -noecho {*}$cmd
 catch { stty columns 200 rows 50 < $spawn_out(slave,name) }
 
 foreach {pattern key} $steps {
+    if {$pattern eq ""} {
+        sleep 0.5
+        send -- [subst -nocommands -novariables $key]
+        continue
+    }
     expect {
         -re $pattern {}
         timeout {
