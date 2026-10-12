@@ -85,7 +85,7 @@ func TestUnlinkRows(t *testing.T) {
 	}
 	out := render(func(pr *Printer) { pr.UnlinkRows(rows); pr.UnlinkSummary(rows, false) })
 	checkContains(t, out,
-		"  - "+p("home", "tmux")+"  ← config/tmux\n",
+		"  - stale "+p("home", "tmux")+"  ← config/tmux\n",
 		"  ! skipped "+p("home", "zshrc")+"\n",
 		"    changed since dots created it; dots will not remove it\n",
 		"  ! skipped "+p("home", "moved")+"\n",

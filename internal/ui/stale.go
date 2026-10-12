@@ -100,7 +100,7 @@ func (p *Printer) UnlinkRows(rows []UnlinkRow) {
 		e := model.Entry{Target: r.Stale.Record.Target, Source: r.Stale.Record.Source}
 		switch r.Outcome {
 		case UnlinkRemove:
-			l.item(toneRed, symUnlink, "", e, true)
+			l.item(toneRed, symUnlink, "stale", e, true)
 		case UnlinkKeep:
 			l.item(toneYellow, symProblem, "skipped", e, false)
 			l.detail(toneDim, "changed since dots created it; dots will not remove it")

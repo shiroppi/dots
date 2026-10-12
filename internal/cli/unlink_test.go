@@ -190,7 +190,7 @@ func TestUnlinkStaleDryRun(t *testing.T) {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	out := te.out.String()
-	for _, want := range []string{"- ~/.b", "← b", "1 to unlink", "dry run: nothing was changed"} {
+	for _, want := range []string{"- stale ~/.b", "← b", "1 to unlink", "dry run: nothing was changed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -206,7 +206,7 @@ func TestUnlinkStaleYes(t *testing.T) {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	out := te.out.String()
-	for _, want := range []string{"- ~/.b", "← b", "1 unlinked"} {
+	for _, want := range []string{"- stale ~/.b", "← b", "1 unlinked"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -270,7 +270,7 @@ func TestUnlinkStaleConfirmation(t *testing.T) {
 	if asked.Initial != 1 || len(asked.Options) != 2 || !strings.HasPrefix(asked.Options[0], "Yes") || !strings.HasPrefix(asked.Options[1], "No") {
 		t.Errorf("question = %+v", asked)
 	}
-	if !strings.Contains(te.out.String(), "- ~/.b") {
+	if !strings.Contains(te.out.String(), "- stale ~/.b") {
 		t.Errorf("the list must be shown before the question:\n%s", te.out)
 	}
 	if !te.isLink(p("home", ".b")) || !te.recorded(t, p("home", ".b")) {
@@ -284,7 +284,7 @@ func TestUnlinkStaleConfirmation(t *testing.T) {
 	if te.isLink(p("home", ".b")) || te.recorded(t, p("home", ".b")) {
 		t.Error("Yes did not remove the link")
 	}
-	if strings.Count(te.out.String(), "- ~/.b") != 1 {
+	if strings.Count(te.out.String(), "- stale ~/.b") != 1 {
 		t.Errorf("the list should not be printed again after the question:\n%s", te.out)
 	}
 	if !strings.Contains(te.out.String(), "1 unlinked") {
