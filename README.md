@@ -83,7 +83,7 @@ When multiple rules target the same path, the highest-priority rule is used. Rul
 go install github.com/shiroppi/dots/cmd/dots@latest
 ```
 
-*Requires Go 1.24 or later.*
+*Requires Go 1.26 or later.*
 
 ## Quick Start
 
