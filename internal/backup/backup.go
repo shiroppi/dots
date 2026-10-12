@@ -86,33 +86,11 @@ type Manifest struct {
 //   - others:  $XDG_DATA_HOME/dots/backups when set and non-empty (it must
 //     be absolute), otherwise ~/.local/share/dots/backups
 func DefaultDir(env platform.Env) (string, error) {
-	switch env.GOOS {
-	case "windows":
-		v := env.Getenv("LOCALAPPDATA")
-		if v == "" {
-			return "", errors.New("LOCALAPPDATA is not set; cannot determine the backup directory")
-		}
-		if !filepath.IsAbs(v) {
-			return "", fmt.Errorf("LOCALAPPDATA must be an absolute path, got %q", v)
-		}
-		return filepath.Join(v, "dots", "backups"), nil
-	case "darwin":
-		if env.Home == "" {
-			return "", errors.New("home directory is unknown; cannot determine the backup directory")
-		}
-		return filepath.Join(env.Home, "Library", "Application Support", "dots", "backups"), nil
-	default:
-		if v := env.Getenv("XDG_DATA_HOME"); v != "" {
-			if !filepath.IsAbs(v) {
-				return "", fmt.Errorf("XDG_DATA_HOME must be an absolute path, got %q", v)
-			}
-			return filepath.Join(v, "dots", "backups"), nil
-		}
-		if env.Home == "" {
-			return "", errors.New("home directory is unknown; cannot determine the backup directory")
-		}
-		return filepath.Join(env.Home, ".local", "share", "dots", "backups"), nil
+	dir, err := platform.AppDir(env, platform.DataDir)
+	if err != nil {
+		return "", err
 	}
+	return filepath.Join(dir, "backups"), nil
 }
 
 // Store creates and restores backup archives inside Dir.
