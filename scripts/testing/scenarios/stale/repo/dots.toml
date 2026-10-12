@@ -1,0 +1,8 @@
+# Scenario "stale": setup.sh links all four files, then removes three rules,
+# so only ~/.gitconfig is still in dots.toml.
+
+[dots]
+"~/.vimrc" = "vimrc"
+"~/.gitconfig" = "gitconfig"
+"~/.zshrc" = "zshrc"
+"~/.tmux.conf" = "tmux.conf"

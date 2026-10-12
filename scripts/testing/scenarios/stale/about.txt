@@ -1,0 +1,31 @@
+Links left behind by rules removed from dots.toml (stale links, #6).
+
+Home before you start (setup.sh ran dots apply, then removed three rules):
+  ~/.gitconfig   link to gitconfig; still in dots.toml
+  ~/.vimrc       link dots created; its rule is gone          (stale)
+  ~/.zshrc       replaced by a regular file after dots linked it (stale, changed)
+  ~/.tmux.conf   link dots created, already removed           (not shown)
+  ~/.local/state/dots/state.json   records of all four links
+
+Try:
+  dots doctor                   exit 1: "! stale ~/.vimrc  ← vimrc" and
+                                "! stale ~/.zshrc" (changed; dots will not remove it)
+  dots apply                    removes nothing; prints the stale count and
+                                Run "dots unlink --stale" to remove them.
+  dots unlink --stale --dry-run lists what would happen; nothing changes
+  dots unlink --stale < /dev/null
+                                no TTY and no --yes: error, nothing changes
+  dots unlink --stale           Yes/No prompt (cursor starts on No);
+                                Ctrl-C exits 130 and changes nothing
+  dots unlink --stale           again, answer Yes (Up, Enter)
+  dots doctor                   exit 0: no stale items left
+  dots unlink                   usage error (exit 2)
+  dots unlink ~/.vimrc          "not implemented yet" (exit 1)
+
+Check:
+  - Only ~/.vimrc is removed. ~/.zshrc (your regular file) and ~/.gitconfig
+    are untouched, and repo/vimrc still exists.
+  - cat ~/.local/state/dots/state.json: only ~/.gitconfig is left.
+  - echo broken > ~/.local/state/dots/state.json; dots doctor
+                                "! error" for the state file, exit 1
+    dots apply                  moves it to state.json.broken-<time> and starts over
