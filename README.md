@@ -93,9 +93,7 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    ```
 2. Edit the newly created `dots.toml` to define your environment and links referring to [Configuration](#configuration):
    ```bash
-   dots edit
-   # Use this instead of "dots edit" if you don't set a $EDITOR environment variable.
-   vim ~/your-dotfiles-path/dots.toml
+   $EDITOR dots.toml
    ```
 3. Apply the configuration (creates symlinks):
    ```bash

@@ -95,7 +95,6 @@ type testEnv struct {
 	fsys   *failFS
 	out    *bytes.Buffer
 	errOut *bytes.Buffer
-	editor []string
 }
 
 func setupEnv(t *testing.T) *testEnv {
@@ -127,10 +126,6 @@ func setupEnv(t *testing.T) *testEnv {
 		Color:       false,
 		BackupDir:   p("backup"),
 		StatePath:   p("state", "state.json"),
-		RunEditor: func(argv []string) error {
-			te.editor = argv
-			return nil
-		},
 	}
 	return te
 }
@@ -604,34 +599,6 @@ func TestRestore(t *testing.T) {
 	}
 }
 
-func TestEdit(t *testing.T) {
-	te := setupEnv(t)
-	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte("[dots]\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	te.app.Env.Vars["EDITOR"] = "myedit --wait"
-	if c := te.run("edit"); c != 0 {
-		t.Errorf("want 0, got %d", c)
-	}
-	if len(te.editor) != 3 || te.editor[0] != "myedit" || te.editor[1] != "--wait" || te.editor[2] != p("dots.toml") {
-		t.Errorf("editor args mismatch: %v", te.editor)
-	}
-
-	te.app.Env.Vars["EDITOR"] = ""
-	if c := te.run("edit"); c != 1 {
-		t.Errorf("want 1, got %d", c)
-	}
-	if !strings.Contains(te.errOut.String(), "EDITOR is not set") {
-		t.Errorf("want 'EDITOR is not set', got %q", te.errOut.String())
-	}
-
-	te.app.Env.Vars["EDITOR"] = "badedit"
-	te.app.RunEditor = func(argv []string) error { return errors.New("editor fail") }
-	if c := te.run("edit"); c != 1 {
-		t.Errorf("want 1, got %d", c)
-	}
-}
-
 func TestExitCodeFunction(t *testing.T) {
 	buf := new(bytes.Buffer)
 	if c := ExitCode(nil, buf); c != 0 || buf.Len() != 0 {
@@ -744,7 +711,6 @@ Core:
 Usability:
   init        Initialize a dotfiles repository
   restore     Restore files from backups
-  edit        Edit dots.toml with $EDITOR
 
 Options:
   -h, --help      Show help
@@ -780,7 +746,7 @@ func TestHelp(t *testing.T) {
 
 	te.run("--help")
 	out := te.out.String()
-	for _, word := range []string{"completion", "doctor", "unlink", "Plugin"} {
+	for _, word := range []string{"completion", "doctor", "edit", "unlink", "Plugin"} {
 		if strings.Contains(out, word) {
 			t.Errorf("root help should not contain %q", word)
 		}

@@ -41,7 +41,7 @@ func Current() (Env, error) {
 		return Env{}, err
 	}
 	vars := map[string]string{}
-	for _, key := range []string{"XDG_DATA_HOME", "XDG_STATE_HOME", "LOCALAPPDATA", "EDITOR", "VISUAL", "HOME", "USERPROFILE"} {
+	for _, key := range []string{"XDG_DATA_HOME", "XDG_STATE_HOME", "LOCALAPPDATA", "HOME", "USERPROFILE"} {
 		if v, ok := os.LookupEnv(key); ok {
 			vars[key] = v
 		}

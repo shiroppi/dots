@@ -1,4 +1,4 @@
-// Package cli wires the dots commands (init, status, apply, clean, restore, edit)
+// Package cli wires the dots commands (init, status, apply, clean, restore)
 // to the config, resolve, apply, backup and ui packages.
 package cli
 
@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -47,8 +46,6 @@ type App struct {
 	Ask func(ui.Question) (ui.Answer, error)
 	// BackupDir overrides backup.DefaultDir(Env) when non-empty.
 	BackupDir string
-	// RunEditor runs the editor attached to the terminal.
-	RunEditor func(argv []string) error
 	// StatePath overrides statefile.DefaultPath(Env) when non-empty.
 	StatePath string
 	// Now returns the current time; nil means time.Now.
@@ -266,7 +263,7 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
 	root.AddGroup(&cobra.Group{ID: "core", Title: "Core:"}, &cobra.Group{ID: "usability", Title: "Usability:"})
-	root.AddCommand(newApplyCmd(app), newStatusCmd(app), newCleanCmd(app), newInitCmd(app), newRestoreCmd(app), newEditCmd(app))
+	root.AddCommand(newApplyCmd(app), newStatusCmd(app), newCleanCmd(app), newInitCmd(app), newRestoreCmd(app))
 	for _, c := range root.Commands() {
 		c.Flags().BoolP("help", "h", false, "Show help")
 		if inner := c.Args; inner != nil {
@@ -495,32 +492,6 @@ func newRestoreCmd(app *App) *cobra.Command {
 	return cmd
 }
 
-func newEditCmd(app *App) *cobra.Command {
-	return &cobra.Command{
-		Use:     "edit",
-		Short:   "Edit dots.toml with $EDITOR",
-		GroupID: "usability",
-		Args:    cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path, err := config.Find(app.FS, app.Env.Cwd)
-			if err != nil {
-				return err
-			}
-			argv := strings.Fields(app.Env.Getenv("EDITOR"))
-			if len(argv) == 0 {
-				return errors.New("EDITOR is not set")
-			}
-			if app.RunEditor == nil {
-				return errors.New("no editor runner is configured")
-			}
-			if err := app.RunEditor(append(argv, path)); err != nil {
-				return fmt.Errorf("editor failed: %w", err)
-			}
-			return nil
-		},
-	}
-}
-
 // Main builds the real App and runs the CLI. It returns the exit code.
 func Main(version string) int {
 	env, err := platform.Current()
@@ -542,11 +513,6 @@ func Main(version string) int {
 		Ask:         func(q ui.Question) (ui.Answer, error) { return ui.Ask(os.Stdin, os.Stdout, q) },
 		ConfirmRestore: func(plan *backup.RestorePlan) (bool, error) {
 			return ui.ConfirmRestore(os.Stdin, os.Stdout, env.Home, plan)
-		},
-		RunEditor: func(argv []string) error {
-			c := exec.Command(argv[0], argv[1:]...)
-			c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-			return c.Run()
 		},
 	}
 	return ExitCode(NewRootCmd(app, version).Execute(), os.Stderr)

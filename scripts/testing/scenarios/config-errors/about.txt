@@ -4,7 +4,7 @@ Try:
   dots status           exit 1: every problem listed at once, with its location
   dots apply            same errors; nothing is created
   dots apply --dry-run  same errors
-  dots edit             fix one entry, rerun status, watch the list shrink
+  $EDITOR dots.toml     fix one entry, rerun status, watch the list shrink
 
 Check:
   - Each message names the key (dots."~/.number", auto[0].ignore[3], ...).
