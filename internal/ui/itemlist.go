@@ -122,7 +122,11 @@ func (l *itemList) sortBlocks() {
 	}
 	slices.SortStableFunc(blocks, func(a, b []listLine) int { return a[0].rank - b[0].rank })
 	l.lines = nil
-	for _, b := range blocks {
+	for i, b := range blocks {
+		// One blank line separates the ok rows from the changed ones.
+		if i > 0 && b[0].rank > 0 && blocks[i-1][0].rank == 0 {
+			l.lines = append(l.lines, listLine{rank: b[0].rank})
+		}
 		l.lines = append(l.lines, b...)
 	}
 }

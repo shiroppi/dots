@@ -105,6 +105,7 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    Rows are grouped by outcome (`✓` already ok, `+` created, `~` replaced, `!` problems), so what changed is at the bottom. Each created (`+`) or replaced (`~`) link is shown with its source, relative to the repository root:
    ```
      ✓ ~/.config/starship.toml
+
      + ~/.vimrc                  ← vimrc
      ~ ~/.config/tmux            ← config/tmux
    ```
