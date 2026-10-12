@@ -333,6 +333,7 @@ func (p *Printer) Plan(plan *apply.Plan) {
 	p.header()
 	var nCreate, nSkip, nReplace, nErr int
 	l := p.newList()
+	l.grouped = true
 	for _, it := range plan.Items {
 		r := it.Result
 		switch it.Action {
@@ -392,6 +393,7 @@ func (p *Printer) Report(rep *apply.Report) {
 	p.header()
 	warnings := 0
 	l := p.newList()
+	l.grouped = true
 	for _, ir := range rep.Items {
 		e := ir.Item.Result.Entry
 		switch ir.Outcome {

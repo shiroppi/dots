@@ -73,8 +73,8 @@ func TestArrowAlignment(t *testing.T) {
 		}
 	}
 	// The unchanged row must not widen the column: the longest arrow row has a two-space gap.
-	if !strings.Contains(ls[1], "much-longer-name  ← src/much-longer-name") {
-		t.Errorf("longest row should be followed by two spaces: %q", ls[1])
+	if !strings.Contains(ls[2], "much-longer-name  ← src/much-longer-name") {
+		t.Errorf("longest row should be followed by two spaces: %q", ls[2])
 	}
 }
 
