@@ -13,15 +13,14 @@
 
 v0.1.0 で、dots.toml に書いたルールどおりにリンクを作り、診断し、バックアップから戻すところまでできた。v0.2.0 では、その前後にある手作業を減らす。
 
-- dots の管理をやめるとき、作ったリンクを安全に外す。
-- 設定から消したルールのリンクを見つけて片付ける。
+- 設定から消したルールのリンクを見つけて、安全に片付ける。dots の管理をやめるときも、ルールを消してから同じ方法で外す。
 - どこからでも、同じリポジトリに対して dots を実行できる。
 
 ### 1.1 草案Issueとの対応
 
 | 草案のIssue | v0.2.0 での扱い | 本書 |
 | --- | --- | --- |
-| Issue 4: `dots unlink` | 含める。指定した配置先はルールの削除または ignore への追加まで行う。Issue 13 と一緒に設計する | 7章 |
+| Issue 4: `dots unlink` | `dots unlink` は設けず、stale を片付ける `dots clean` だけを加える。dots.toml は書き換えない。Issue 13 と一緒に設計する | 7章 |
 | Issue 12: 実機E2E（CI） | v0.1.0 で実装済み。新コマンドのシナリオを追加する | 10章 |
 | Issue 13: 設定から消したルールのリンク | 含める。stateファイルを導入する | 5章、7章、8章 |
 
@@ -42,7 +41,9 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 - リポジトリの更新（pull）や、一部のファイルだけの取得。前者は git を直接使う。後者は v0.4.0 の source プラグインで扱う。
 - Gitへの commit、push。init も行わない。
 - `dots add`（既存のファイルをリポジトリへ移して管理に加える）と `dots cd`（リポジトリへ移動する）。dots は dots.toml にリンクを宣言して適用するだけの道具で、ファイルをリポジトリへ移すことも、シェルのカレントディレクトリを変えることもしない。ファイルの移動は利用者と git に任せ、リポジトリの場所は利用者がすでに知っているので、dots の考え方に合わないとして追加しない。
-- unlink 時に、リンクを source の中身のコピーで置き換えること。
+- dots.toml を書き換えること。配置先の管理をやめるときは、利用者が dots.toml からルールを消し、`dots clean` でリンクを片付ける（7.5）。
+- `dots edit`（dots.toml をエディターで開く）。v0.1.0 にはあったが削除する（2章）。エディターでファイルを開くのは `$EDITOR dots.toml` で足り、dots の役割ではない。`dots cd` を追加しないのと同じ考え方である。
+- clean 時に、リンクを source の中身のコピーで置き換えること。
 - 複数のdotfilesリポジトリを同時に使い分けること（5.4、11章）。
 - プラグイン機構。
 - Issue #12（親ディレクトリの扱い）。現状では `internal/apply/execute.go` の `place` が、配置先の親ディレクトリを確認なしで `MkdirAll(0o755)` で作る。v0.2.0 ではこの動作を変えない。
@@ -61,17 +62,18 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 | status の source 表示と --verbose | 既定では source と出所（`auto[0]` など）を表示しない。`--verbose` を付けると全項目に `← source` と出所を表示し、v0.1.0 の `-> source` は `← source` に変わる。上書きされたルールの一覧は `--verbose` のときだけ表示し、要約の「上書きされたルールの件数」は廃止する（8.1、8.3） | 表示の変更。v0.1.0 の doctor の出力を解析しているスクリプトには影響する |
 | Go の最小バージョン | 1.24 から 1.26 に上げる（8.4） | `go install` で入れる場合は Go 1.26 以上が必要になる。配布バイナリには影響しない |
 | 確認プロンプト | huh をやめ、bubbletea で書いた確認プロンプトにする（8.4） | 選択肢と答えの意味は v0.1.0 と同じ。操作方法が変わる |
-| 新コマンド | unlink | - |
+| edit の削除 | `dots edit` を削除する（1.2） | `dots edit` は使えなくなる（別名も残さない）。`$EDITOR dots.toml` などで直接開く |
+| 新コマンド | clean（7章） | - |
 
 ## 3. CLIコマンド
 
-v0.1.0 のコマンドに次を追加する。
+v0.1.0 のコマンドに次を追加する。v0.1.0 の `dots edit` は削除する（1.2）。
 
 | コマンド | 動作 |
 | --- | --- |
-| dots unlink <target>... | 指定した配置先のリンクを外し、dots.toml から管理を外す（[dots] はエントリー削除、[auto] は ignore に追加）。 |
-| dots unlink --stale | 設定にはないが dots が作ったリンクを外す。実行前に確認する。 |
-| dots unlink ... --dry-run | 外すもの、触らないもの、dots.toml の書き換えを表示する。 |
+| dots clean | 設定にはないが dots が作ったリンク（stale）を外す。実行前に確認する。 |
+| dots clean --no-confirm | 確認せずに外す。 |
+| dots clean --dry-run | 外すものと触らないものを表示する。 |
 
 すべてのコマンドに共通のオプションとして `--repo <dir>` を加える。リポジトリルートを指定する（4.1）。短い形は設けない。init では使えない。
 
@@ -88,12 +90,11 @@ Usage:
 Core:
   apply       Apply dotfiles
   status      Show the status of managed files
+  clean       Remove links that are no longer in dots.toml
 
 Usability:
   init        Initialize a dotfiles repository
   restore     Restore files from backups
-  unlink      Unlink managed files
-  edit        Open dots.toml in your editor
 
 Options:
   --repo <dir>    Use <dir> as the repository
@@ -105,11 +106,11 @@ Use "dots <command> --help" for more information.
 
 ## 4. リポジトリの解決
 
-v0.1.0 では、doctor（v0.2.0 で status に改名）、apply、restore、edit はカレントディレクトリから親へ dots.toml を探し、見つからなければエラーにしていた。v0.2.0 では、どこにいても dots を使えるように、リポジトリの場所をファイルに記録し、見つからないときはそれを使う。あわせて、リポジトリを明示的に指定する方法を2つ加える。
+v0.1.0 では、doctor（v0.2.0 で status に改名）、apply、restore、edit（v0.2.0 で削除）はカレントディレクトリから親へ dots.toml を探し、見つからなければエラーにしていた。v0.2.0 では、どこにいても dots を使えるように、リポジトリの場所をファイルに記録し、見つからないときはそれを使う。あわせて、リポジトリを明示的に指定する方法を2つ加える。
 
 ### 4.1 解決の順序
 
-対象コマンドは status、apply、restore、edit、unlink とする。init は対象外で、v0.1.0 と同じくカレントディレクトリに dots.toml を作る。
+対象コマンドは status、apply、clean、restore とする。init は対象外で、v0.1.0 と同じくカレントディレクトリに dots.toml を作る。
 
 1. `--repo <dir>` オプションがあれば、`<dir>` をリポジトリルートとする。`<dir>` はカレントディレクトリを基準に解決する。`<dir>` の直下に dots.toml がなければエラーにする。親ディレクトリは探さない。
 2. 環境変数 `DOTS_REPO` が空でなければ、その値をリポジトリルートとする。絶対パスでなければエラーにする。直下に dots.toml がなければエラーにする。
@@ -119,13 +120,13 @@ v0.1.0 では、doctor（v0.2.0 で status に改名）、apply、restore、edit
 
 1と2は利用者が明示した指定なので、失敗しても次の方法へは進まない。3を4より優先するのは、v0.1.0 の動作を変えないためである。
 
-`--repo` はリポジトリを指定するだけで、カレントディレクトリは変えない。コマンドライン引数の相対パス（unlink の `<target>`、restore の `<archive>`）は、`--repo` があっても実際のカレントディレクトリを基準に解決する。ファイル名は dots.toml に固定し、設定ファイルのパスを直接指定するオプションは設けない。
+`--repo` はリポジトリを指定するだけで、カレントディレクトリは変えない。コマンドライン引数の相対パス（restore の `<archive>`）は、`--repo` があっても実際のカレントディレクトリを基準に解決する。ファイル名は dots.toml に固定し、設定ファイルのパスを直接指定するオプションは設けない。
 
 結果表示の先頭にあるリポジトリルートの表示（v0.1.0 の8章）には、2または4で決めた場合だけ出所を付記する（例: `Repository: ~/dotfiles (recorded)`、`Repository: ~/dotfiles (DOTS_REPO)`）。
 
 ### 4.2 リポジトリの記録
 
-`dots status` や `dots edit` などをどこからでも使えるように、普段使うリポジトリルートの場所をファイルに保存する。バックアップ（v0.1.0 の7.1）と同じデータディレクトリに置く。
+`dots status` や `dots clean` などをどこからでも使えるように、普段使うリポジトリルートの場所をファイルに保存する。バックアップ（v0.1.0 の7.1）と同じデータディレクトリに置く。
 
 - Linux、FreeBSD、OpenBSDなど: 有効な XDG_DATA_HOME/dots/repository。XDG_DATA_HOME が未設定または空なら ~/.local/share/dots/repository。設定されているが絶対パスでない場合はエラーにする。
 - macOS: ~/Library/Application Support/dots/repository
@@ -195,7 +196,7 @@ UTF-8 の JSON とする。
 - apply は、作成したリンクと、すでに ValidLink だったリンクを記録する。v0.1.0 で作ったリンクも、v0.2.0 で apply すれば記録される。
 - 同じ target の記録はひとつだけ持つ。新しく記録するときは上書きする。
 - apply は、記録の target が存在しなくなっていれば、その記録を消す。
-- unlink は、外したリンクの記録を消す（7章）。
+- clean は、外したリンクと、StaleChanged・StaleGone の記録を消す（7.2）。
 - status と各コマンドの --dry-run は state を変更しない。
 
 書き込みは、同じディレクトリの一時ファイルに書き終えてから最終名へ rename する。dots を同時に複数実行した場合の排他制御は行わない。後から書いた方の内容が残る。
@@ -209,7 +210,7 @@ stale は「現在の設定にはないが、dots が作ったリンク」であ
 
 stale の記録は、target の現在の状態で次のように分ける。判定には Lstat と Readlink を使い、リンク先はたどらない。
 
-| 状態 | 条件 | unlink --stale での動作 |
+| 状態 | 条件 | dots clean での動作 |
 | --- | --- | --- |
 | StaleLink | target がシンボリックリンクで、リンク文字列が記録の link と一致する | リンクを削除し、記録を消す |
 | StaleChanged | target がシンボリックリンクだがリンク文字列が違う、または通常ファイルやディレクトリになっている | 触らない。記録を消し、報告する |
@@ -227,8 +228,8 @@ stale の記録は、target の現在の状態で次のように分ける。判�
 ### 5.5 stateが読めない場合
 
 - ファイルがない: 記録がないものとして扱う。stale は検出されない。エラーにも警告にもしない。
-- JSON として読めない、必須キーがない: 読めなかったことを警告として表示し、記録がないものとして扱う。status は `! error` として報告する（終了コード1）。apply は書き込む前に、壊れたファイルを `state.json.broken-<UTC日時>` に rename して残し、新しい state を作る。退避先は表示する。unlink --stale は何も削除せずエラー終了する。
-- version が 1 より大きい: 新しい dots で書かれたものとみなし、書き換えない。読み取り専用のコマンドは警告を出して記録なしとして続ける。state を書くコマンド（apply、unlink）は変更前にエラー終了する。
+- JSON として読めない、必須キーがない: 読めなかったことを警告として表示し、記録がないものとして扱う。status は `! error` として報告する（終了コード1）。apply は書き込む前に、壊れたファイルを `state.json.broken-<UTC日時>` に rename して残し、新しい state を作る。退避先は表示する。clean は何も削除せずエラー終了する。
+- version が 1 より大きい: 新しい dots で書かれたものとみなし、書き換えない。読み取り専用のコマンドは警告を出して記録なしとして続ける。state を書くコマンド（apply、clean）は変更前にエラー終了する。
 
 ## 6. 共通の約束
 
@@ -237,182 +238,78 @@ stale の記録は、target の現在の状態で次のように分ける。判�
 - パスの規則（v0.1.0 の4章）。設定ファイルに書くパスは / 区切りで、絶対パスを禁止する。
 - 結果表示の形式と記号（v0.1.0 の8章、本書の9章）。先頭にリポジトリルートを表示する。
 - 終了コード（v0.1.0 の8章）。0 は成功、1 は失敗または問題の検出、2 は使い方の誤り、130 はユーザーによる中断。
-- --dry-run はファイルシステム、dots.toml、state、リポジトリの記録を変更しない。
+- --dry-run はファイルシステム、state、リポジトリの記録を変更しない。dots.toml はどのコマンドも書き換えない（init が新しく作る場合を除く）。
 
-### 6.1 dots.toml の書き換え
-
-unlink は dots.toml を書き換える。コメントや並び順を残すため、TOML ライブラリで書き出し直さず、テキストとして必要な箇所だけを変える。
-
-書き換えは次の2種類に限る。
-
-| 操作 | 使うコマンド | 内容 |
-| --- | --- | --- |
-| エントリーの削除 | unlink | `[dots]` または `[dots.<os>]` の該当するキーと値の組を、その行ごと削除する。同じ行の末尾のコメントも消える。直前のコメント行は残す |
-| ignore への追加 | unlink | `[[auto]]` または `[[auto.<os>]]` のルールの ignore 配列の末尾に要素を追加する。ignore がなければ、そのルールの最後のキーと値の組の直後に `ignore = ["<名前>"]` の行を挿入する |
-
-- テーブルや配列の範囲は、TOML パーサーが返す位置情報で決める。行の見た目（`[` で始まる行など）では判断しない。複数行文字列や複数行の配列の途中に挿入することはない。
-- ignore 配列が複数行で書かれている場合は、最後の要素の次の行に、その要素と同じ字下げで追加する。1行で書かれている場合は、閉じ括弧の直前に `, "<名前>"` を追加する。
-- `dots = { ... }` のようなインラインテーブル、`dots."~/.vimrc" = ...` のようなドット付きキー、1行に複数のキーと値の組を書いている場合など、上の方法で書き換えられない書き方は、変更前にエラーにする。dots.toml を手で編集するよう案内する。
-- キーと値は TOML の基本文字列として必要なエスケープを行う。
-- 改行コードは既存ファイルに合わせる（CRLF のファイルには CRLF で書く）。
-- 書き換え後のテキストを読み込み直し、検証を通ること、読み込んだ結果が「元の設定に今回の変更だけを加えたもの」と一致することを確認してから書き込む。一致しなければ書き込まずにエラーにする。
-- 書き込みは一時ファイルを経由して rename する。
-
-## 7. dots unlink
+## 7. dots clean
 
 ### 7.1 使い方
 
 ```
-dots unlink <target>...
-dots unlink --stale
-dots unlink --stale --no-confirm
-dots unlink ... --dry-run
+dots clean
+dots clean --no-confirm
+dots clean --dry-run
 ```
 
-- `<target>` は配置先のパス。絶対パス、`~` で始まるパス、またはカレントディレクトリからの相対パスで指定する。複数指定できる。
-- `--stale` は、stale（5.4）を対象にする。
-- `<target>` と `--stale` は同時に指定できない。何も指定しない場合も使い方の誤り（終了コード2）とする。
+- stale（5.4）を片付ける。対象は stale だけで、現在の設定にある配置先には触らない。
+- 引数は取らない。引数を渡した場合は使い方の誤り（終了コード2）とする。
+- dots.toml は変えない。ルールはすでに dots.toml から消えている。
 
-2つの使い方は、dots.toml を変えるかどうかが違う。
+ある配置先の管理をやめるときは、dots.toml からそのルールを消す（auto なら ignore に加える）。すると、そのリンクは stale になり、`dots clean` で外せる。dots の利用をやめるときも同じで、dots.toml のルールをすべて消してから `dots clean` を実行すれば、記録のあるリンクはすべて外れる。
 
-| 使い方 | リンク | dots.toml |
+現在の設定のリンクを外すオプション（`--all` など）は設けない。
+
+### 7.2 リンクの外し方
+
+stale の記録ごとに、5.4の状態で判定する。
+
+| 状態 | リンク | state の記録 |
 | --- | --- | --- |
-| `<target>` | 外す | 指定した配置先を管理から外すように書き換える（7.3） |
-| `--stale` | 外す | 変えない。ルールはすでに消えている |
-
-`<target>` は「この配置先の管理をやめる」ための使い方なので、次の apply で作り直されないように dots.toml も書き換える。
-
-現在の設定のリンクをすべて外す `--all` は設けない。一度の操作で影響する範囲が広すぎるためである。複数の配置先をまとめて外す場合は `<target>` を複数指定する。
-
-### 7.2 `<target>` の対象の決め方
-
-dots は、`[dots]` のエントリーも `[[auto]]` の項目も、配置先を1つのリンクとして扱う。ディレクトリの中の個々のファイルは管理していない。そのため、`<target>` と現在の設定の配置先を次のように照らし合わせる。比較は v0.1.0 の5.4と同じ正規化で行う。
-
-1. 現在の設定で採用されている配置先と一致する: その配置先を対象にする。
-2. 採用されている配置先の下にある（例: ~/.config/nvim が配置先のときの ~/.config/nvim/init.lua）: 下記の確認を行う。
-3. stale の target と一致する: stale として扱う（7.4の表）。dots.toml は変えない。
-4. どれにも当たらない: 変更前にエラー終了する。配置先の親ディレクトリ（例: auto の target である ~/.config）を指定した場合もここに当たる。
-
-2の場合は、指定したパスだけを管理から外すことはできないので、上位の配置先をどうするか確認する。
-
-```
-~/.config/nvim/init.lua is inside ~/.config/nvim, which dots links as a whole.
-
-> Unlink ~/.config/nvim
-  Skip ~/.config/nvim/init.lua
-```
-
-- 「Unlink」を選ぶと、上位の配置先（~/.config/nvim）を1の場合と同じく対象にする。
-- 「Skip」を選ぶと、そのパスについては何もしない（`! skipped`）。
-- 複数の `<target>` が同じ上位の配置先の下にある場合は、1回だけ確認する。
-- TTY がない場合は確認できないので、変更前にエラー終了し、上位の配置先を直接指定するよう案内する。`--no-confirm` はこの確認には効かない。
-- `--dry-run` では確認せず、`! inside ~/.config/nvim` として上位の配置先を示す。
-- 中断は終了コード130とする。
-
-### 7.3 dots.toml の書き換え
-
-`<target>` の対象になった配置先ごとに、現在のOSでその配置先を出力するルールをすべて書き換える。上書きされて採用されていない候補も含める。採用されているルールだけを消すと、上書きされていた下位のルールが次の apply で有効になってしまうためである。
-
-| 出力しているルール | 書き換え方 |
-| --- | --- |
-| `[dots]`、`[dots.<現在のOS>]` のエントリー | そのエントリーの行を削除する |
-| `[[auto]]`、`[[auto.<現在のOS>]]` のルール | そのルールの ignore に、source 直下の項目名を追加する。ignore がなければ `ignore = ["<名前>"]` の行を追加する |
-
-例: 次の設定で `dots unlink ~/.vimrc ~/.config/nvim` を実行する。
-
-```toml
-[dots]
-"~/.vimrc" = "vimrc"
-
-[[auto]]
-source = "config"
-target = "~/.config"
-ignore = ["README.md"]
-```
-
-書き換え後は次のようになる。
-
-```toml
-[dots]
-
-[[auto]]
-source = "config"
-target = "~/.config"
-ignore = ["README.md", "nvim"]
-```
-
-- `[dots]` と `[[auto]]` の共通ルールを書き換えると、他のOSでもその配置先は配置されなくなる。結果表示と --dry-run で、共通ルールを書き換えることを示す。
-- 他のOSのルール（例: linux で実行したときの `[dots.darwin]`）は書き換えない。
-- 項目名に `*`、`?`、`[`、`{` が含まれる場合、ignore のパターンとして正確に書けない（v0.1.0 の5.3）。この場合は変更前にエラー終了し、dots.toml を手で編集するよう案内する。
-- 書き換えは6.1の規則に従う。さらに、書き換え後の設定を展開し直し、配置先の集合が「元の配置先から今回の対象を除いたもの」と一致することを確かめてから書き込む。
-- 配置先の状態が NotExist、InvalidLink、FileOrDir でも、dots.toml は書き換える。リンクがなくても、管理をやめるという指定は有効だからである。
-
-### 7.4 リンクの外し方
-
-対象ごとに、v0.1.0 の6章の状態（stale は5.4の状態）で判定する。
-
-| 対象 | 状態 | リンク |
-| --- | --- | --- |
-| 設定にある配置先 | ValidLink | 削除し、state の記録を消す |
-| 設定にある配置先 | NotExist | 何もしない（`✓ not linked`） |
-| 設定にある配置先 | InvalidLink、FileOrDir | 触らない（`! skipped`） |
-| stale | StaleLink | 削除し、state の記録を消す |
-| stale | StaleChanged | 触らない（`! skipped`）。state の記録を消す |
-| stale | StaleGone | state の記録を消す（表示はしない） |
+| StaleLink | 削除する | 消す |
+| StaleChanged | 触らない（`! skipped`） | 消す |
+| StaleGone | 何もしない（表示はしない） | 消す |
 
 - 削除するのはシンボリックリンクそのものだけである。source 側のファイル、リンク先、通常ファイル、ディレクトリは削除しない。
-- 削除の直前にもう一度 Lstat と Readlink で状態を確かめ、判定時と違っていれば削除せず `! skipped` とする。
+- 削除の直前にもう一度 Lstat と Readlink で状態を確かめる。StaleLink のままなら削除する。存在しなくなっていれば、望む状態になっているので削除したものとして扱う。それ以外に変わっていれば削除せず `! skipped` とし、記録を消す。
+- 削除に失敗した場合は `! failed` とし、記録を残す。終了コードは1とする。
 - apply が作った親ディレクトリは、空になっても削除しない。
-- バックアップからの復元は行わない。案内だけを表示する（7.6）。
+- バックアップからの復元は行わない。
 
-`! skipped` は、dots が作ったリンクがそこにない、という望む状態にすでになっているので、エラーとは扱わない。終了コードは、I/O エラーや対象外の `<target>` がなければ0とする。
+`! skipped` は、dots が作ったリンクがそこにない、という望む状態にすでになっているので、エラーとは扱わない。
 
-### 7.5 確認と処理の順序
+state が読めない場合は5.5に従う。壊れている場合も、新しい version の場合も、何も削除せずエラー終了する。state の書き込みに失敗した場合は、外したリンクは戻さず、警告を表示して終了コード1とする。
 
-- `--stale` では、外す対象と触らない対象を一覧したうえで「Yes / No」を確認する。一括で外すと、stale の判定に誤りがあったときに影響が広いためである。No なら何も変更せず終了コード0で終える。`--no-confirm` で確認を省略できる。TTY がなく `--no-confirm` もない場合は、外す対象があれば変更前にエラー終了する。中断は終了コード130とする。
-- `<target>` では、7.2 の上位の配置先の確認を除いて確認しない。利用者が対象を名指ししており、dots.toml の変更は git で戻せ、source も消えないためである。事前の確認には --dry-run を使う。
+### 7.3 確認
 
-`<target>` の処理は次の順に行う。
+- 外すリンク（StaleLink）があれば、外す対象と触らない対象を一覧したうえで「Yes / No」を確認する。一括で外すと、stale の判定に誤りがあったときに影響が広いためである。初期カーソルは No とする。
+- No なら何も変更せず、`Nothing was changed.` を表示して終了コード0で終える。中断は終了コード130とする。
+- `--no-confirm` で確認を省略できる。TTY がなく `--no-confirm` もない場合は、一覧を表示したうえで変更前にエラー終了する。
+- 外すリンクがなく、StaleChanged と StaleGone の記録を消すだけの場合は確認しない。リンクには触らないためである。
+- stale がひとつもなければ `No stale links.` を表示して終了コード0で終える。
 
-1. すべての `<target>` について対象を決め（7.2）、dots.toml の書き換え内容を計算して検証する（7.3）。ここで問題があれば何も変更しない。
-2. dots.toml を書き換える。複数の `<target>` の変更は1回の書き込みにまとめる。
-3. リンクを外す（7.4）。
-4. state を更新する。
-
-dots.toml を先に書き換えるのは、リンクを外す途中で失敗したときに、残ったリンクが stale として検出され、`dots unlink --stale` で片付けられるようにするためである。3で失敗した場合は、その旨と `dots unlink --stale` を案内する。
-
-### 7.6 表示
+### 7.4 表示
 
 ```
 Repository: ~/dotfiles
 
-  - ~/.vimrc               ← vimrc
-    dots.toml: remove "~/.vimrc" = "vimrc" from [dots] (all OSes)
-  - ~/.config/nvim         ← config/nvim
-    dots.toml: add "nvim" to ignore of auto[0] (source "config", all OSes)
-  ✓ ~/.config/wezterm     not linked
-    dots.toml: remove "~/.config/wezterm" = "config/wezterm" from [dots.darwin]
-  ! skipped ~/.gitconfig
-    a regular file exists; dots did not create it
-    dots.toml: remove "~/.gitconfig" = "git/gitconfig" from [dots] (all OSes)
+  - stale ~/.config/tmux  ← config/tmux
+  ! skipped ~/.zshrc
+    changed since dots created it; dots will not remove it
 
-2 unlinked, 1 not linked, 1 skipped, dots.toml updated
-
-Backup available for ~/.vimrc:
-  dots restore ~/.local/share/dots/backups/20261001T120000Z-0001-vimrc.tar.gz
+1 removed, 1 skipped
 ```
 
-- 削除は新しい記号 `-` で示す（9章）。
-- dots.toml の書き換えは、各項目の詳細行に表示する。共通ルールを書き換える場合は `(all OSes)` を付ける。
-- stale の項目には `stale` を付ける。
-- 外した配置先について、バックアップディレクトリにその配置先のアーカイブがあれば、最も新しいものを `dots restore` の形で案内する。アーカイブの manifest.json だけを読み、復元は行わない。アーカイブが読めない場合はその旨を出さずに飛ばす。
+- 削除は新しい記号 `-` で示す（9章）。`-` の行には、state に記録した source を `←` の後に表示する（8.3）。
+- 削除の直前に状態が変わっていた項目は `! skipped` とし、詳細に `changed since it was checked; left untouched` を表示する。削除に失敗した項目は `! failed` とし、詳細にエラーを表示する。
+- 確認を出した場合、一覧は確認の前に表示済みなので、確認の後は一覧と結果が違う項目（`! skipped` に変わったもの、`! failed`）と要約だけを表示する。
+- `--dry-run` では一覧の後に `1 to remove, 1 to skip` と `dry run: nothing was changed` を表示する。
 
-### 7.7 v0.2.0 で決めたこと
+### 7.5 v0.2.0 で決めたこと
 
-草案の Issue 4 では「設定からルールを消すか、バックアップを戻すかも、このコマンドに含めるか決める」としていた。v0.2.0 では次のとおりとする。
+草案の Issue 4 では `dots unlink` を予定し、「設定からルールを消すか、バックアップを戻すかも、このコマンドに含めるか決める」としていた。v0.2.0 では次のとおりとする。
 
-- `<target>` を指定した場合は、ルールの削除（dots）または ignore への追加（auto）まで行う（7.3）。`--stale` では dots.toml を変えない。現在の設定のリンクをすべて外す機能は設けない。
-- バックアップの復元は含めない。案内だけを表示する（7.6）。
+- `dots unlink` は設けない。stale を片付ける `dots clean` だけを加える。
+- dots は dots.toml を書き換えない。dots.toml は利用者が書く宣言で、dots はそれを読んで適用するだけにする。配置先の管理をやめることも、dots.toml からルールを消すという宣言の変更で表し、残ったリンクの片付けを `dots clean` が受け持つ。`dots unlink <target>` のように dots が dots.toml を書き換えると、コメントや書式を残したままテキストを書き換える処理と、上書きされたルールや OS ごとのルールの扱いが必要になり、得られる便利さに比べて複雑になりすぎる。
+- バックアップの復元は含めない。復元は `dots restore` で行う。
 
 ## 8. 既存コマンドの変更
 
@@ -475,18 +372,18 @@ Repository: ~/dotfiles
   ! stale ~/.zshrc
     changed since dots created it; dots will not remove it
 
-Run "dots unlink --stale" to remove stale links.
+Run "dots clean" to remove stale links.
 ```
 
 - StaleLink は `! stale` とする。`--verbose` では、記録の source を `←` の後に表示する（8.3）。
-- StaleChanged は `! stale` とし、詳細に変更されていることを表示する。unlink --stale では削除されないことも示す。
+- StaleChanged は `! stale` とし、詳細に変更されていることを表示する。dots clean では削除されないことも示す。
 - StaleGone は表示しない。status は state を書き換えないので、記録はそのまま残る。
 - StaleLink と StaleChanged があれば、status の終了コードは1とする。`!` は要対応を表すという v0.1.0 の8章の約束に合わせる。state が壊れている場合（5.5）も1とする。
 
 ### 8.2 apply
 
 - apply は 5.3 のとおり state を更新する。
-- stale は削除しない。stale が1件以上あれば、要約の後に件数と `Run "dots unlink --stale" to remove them.` を表示する。
+- stale は削除しない。stale が1件以上あれば、要約の後に件数と `Run "dots clean" to remove them.` を表示する。
 - state の書き込みに失敗しても、作ったリンクは戻さない。警告を表示し、終了コードは1とする。
 - 項目の行は `✓` → `+` → `~` → `!` の順にまとめて表示する。`✓` の行と他の行の間には空行を1つ入れる（どちらかがなければ入れない）。同じ記号の中では元の順序を保ち、`backup:` などの補足行は各項目の直下に置く。`--dry-run` の計画も同じ順にする。
 
@@ -522,18 +419,18 @@ Repository: ~/dotfiles
 1 created, 3 already ok
 ```
 
-- 対象は「変更した」項目とする。apply と apply --dry-run の `+`（作成）と `~`（置換）、unlink の `-`（削除）の行に付ける。`✓` と `!` の行には付けない。
+- 対象は「変更した」項目とする。apply と apply --dry-run の `+`（作成）と `~`（置換）、clean の `-`（削除）の行に付ける。`✓` と `!` の行には付けない。
 - source はリポジトリルートからの相対パスで、/ 区切りで表示する（v0.1.0 の8章の表示規則と同じ）。stale の項目は state に記録した source を使う。
 - `linked to` のような語は使わず、`←` だけを使う。
 - source は薄い色（dim）で表示する。色なしの場合（`NO_COLOR`、TTY でない場合）も `← source` の文字は出す。
 - `←` の位置は、その一覧で `←` を付ける行のうち最も長い「記号＋配置先」に合わせて揃える。幅は表示幅（全角文字は2）で数える。揃えた結果が端末幅を超える場合は、揃えずに配置先の後ろに空白2つで続ける。
-- status の source の表示（v0.1.0 の8章の `-> source`）も `←` に変える。矢印の向きと意味を、すべてのコマンドで「配置先 ← source」にそろえるためである。status は既定では source と出所を表示せず、`--verbose` を付けたときだけ全項目に `← source` と出所を表示する（8.1）。変更した項目だけに付ける規則は、apply、unlink に適用する。
+- status の source の表示（v0.1.0 の8章の `-> source`）も `←` に変える。矢印の向きと意味を、すべてのコマンドで「配置先 ← source」にそろえるためである。status は既定では source と出所を表示せず、`--verbose` を付けたときだけ全項目に `← source` と出所を表示する（8.1）。変更した項目だけに付ける規則は、apply、clean に適用する。
 
 #### やること
 
 - [ ] ui の項目行に、変更した項目だけ source を付ける処理を追加する（apply、apply --dry-run）。
-- [ ] `←` の列揃えと、端末幅を超える場合の扱いを実装する。この処理は ui パッケージの共通関数にする。status の stale、unlink の `-` の行でも同じ揃え方を使うためである。
-- [ ] unlink の表示を同じ規則で実装する。
+- [ ] `←` の列揃えと、端末幅を超える場合の扱いを実装する。この処理は ui パッケージの共通関数にする。status の stale、clean の `-` の行でも同じ揃え方を使うためである。
+- [ ] clean の表示を同じ規則で実装する。
 - [ ] status の `-> source` を `← source` に変え、既定では source と出所を表示せず、`--verbose` のときだけ表示する。上書きされたルールの一覧を `--verbose` のときだけにし、要約の上書き件数をなくす。
 - [ ] README の出力例を更新する。
 - [ ] 単体テスト: 変更した項目だけに付くこと、列揃え、全角文字を含むパス、色なしの出力。
@@ -583,7 +480,7 @@ huh をやめ、bubbletea の上に確認プロンプトの部品を1つ書く�
 
 - 作るもの: 質問文、選択肢の一覧（2〜4個）、任意のチェックボックス1つ、操作のヘルプ1行。
 - 作らないもの: 絞り込み検索、スクロール、複数のチェックボックス、自由入力、マウス操作、テーマの切り替え。
-- 確認はすべてこの部品で作る。apply の競合（`Confirm`）、restore（`ConfirmRestore`）、v0.2.0 で増える unlink の上位の配置先の確認（7.2）と `--stale` の Yes／No（7.5）である。確認ごとに個別の画面は書かない。
+- 確認はすべてこの部品で作る。apply の競合（`Confirm`）、restore（`ConfirmRestore`）、v0.2.0 で増える clean の Yes／No（7.3）である。確認ごとに個別の画面は書かない。
 
 huh を使わなくなるので、huh は依存から外す。bubbletea は残る。
 
@@ -614,14 +511,13 @@ Replace it with a link to vimrc?
 - 中断した場合は `? ~/.vimrc  cancelled` を残す。
 - 質問文は1回だけ書き、書き直すのは選択肢とチェックボックスの行だけにする。長いパスで質問文が折り返しても、表示が崩れないようにするためである。
 
-v0.2.0 の確認は次の4つになる。
+v0.2.0 の確認は次の3つになる。
 
 | 確認 | 選択肢 | チェックボックス | 初期カーソル |
 | --- | --- | --- | --- |
 | apply の競合（v0.1.0 の6章） | Yes – back up and replace / No – skip | Process the rest of the files similarly | No |
 | restore の既存ターゲット（v0.1.0 の7.2） | Back up current content and restore / Skip | なし | Skip |
-| unlink の上位の配置先（7.2） | Unlink … / Skip … | なし | Skip |
-| unlink --stale（7.5） | Yes – remove them / No – keep them | なし | No |
+| dots clean（7.3） | Yes – remove them / No – keep them | なし | No |
 
 #### #4 との関係
 
@@ -642,7 +538,7 @@ bubbletea は v2 を使う。v1 で書いて後から v2 へ移る手間を省�
 - [ ] 確定していない終わり方がすべて中断（終了コード130）になることをテストする。
 - [ ] apply の競合の確認（`Confirm`）と restore の確認（`ConfirmRestore`）を置き換える。
 - [ ] huh を go.mod から外す。
-- [ ] v0.2.0 の新しい確認（7.2、7.5）をこの部品で作る。
+- [ ] v0.2.0 の新しい確認（7.3）をこの部品で作る。
 - [ ] tty-e2e の expect シナリオを更新する。下キーでチェックボックスへ移れること、Space で切り替えて Yes to All になること、Ctrl-C で130になることを確認する。
 - [ ] #4 の再現手順（`printf '\r' | script -qec "dots apply" /dev/null`）でプロンプトが止まらないことを確認する。
 
@@ -660,9 +556,8 @@ v0.1.0 の8章の記号に次を加える。
 
 | 記号 | 色 | 意味 | 使うコマンド |
 | --- | --- | --- | --- |
-| `-` | 赤 | 削除（リンクを外す） | unlink |
-| `✓` | 緑 | すでに望む状態にある | unlink（既存の意味を広げる） |
-| `!` | 黄 | 問題あり。新しい短い語として `stale`（status）、`inside`（unlink --dry-run）を加える。`skipped` は unlink でも使う | status、unlink |
+| `-` | 赤 | 削除（リンクを外す）。短い語 `stale` を付ける | clean |
+| `!` | 黄 | 問題あり。新しい短い語として `stale`（status）、`skipped` と `failed`（clean）を加える | status、clean |
 
 - 項目行の形（2スペースの字下げ、記号、パス、詳細は4スペースの字下げ）は v0.1.0 と同じとする。
 - 色なしの扱い、エラーメッセージ中のパスの省略も v0.1.0 と同じとする。
@@ -674,15 +569,14 @@ v0.1.0 の9章の方針を続ける。memfs で次を単体テストする。
 - 4章のリポジトリ解決（`--repo`、`DOTS_REPO`、カレントディレクトリ、記録の優先順位、指定先に dots.toml がない場合、記録が壊れている場合）と、記録を書く条件（init は記録しない、など）。
 - state の読み書き、壊れたファイルの退避、新しい version の拒否、記録と削除の規則。`internal/platform` の `AppDir` の OS ごとの解決（5.1）。
 - stale の判定（StaleLink、StaleChanged、StaleGone、別リポジトリの記録の除外）。
-- unlink の対象選択（一致、配置先の下のパス、stale、どれにも当たらない）、dots.toml の書き換え（エントリー削除、ignore の追加と新設、上書きされた候補も含めること、ignore に書けない名前）、状態ごとの動作、削除直前の再確認。
+- clean の状態ごとの動作、削除直前の再確認、削除に失敗したときに記録を残すこと、確認の有無（TTY、`--no-confirm`、外すリンクがない場合）、引数を渡したときの使い方の誤り。
 
 CI の実バイナリE2E（smoke.sh）に次のシナリオを加え、5つのOSで実行する。
 
-1. dots.toml からルールを消し、`dots status` が stale を表示し、`dots unlink --stale` で消え、`dots status` が stale を表示しなくなること。
-2. `dots unlink <target>` で dots のエントリーが消え、auto の ignore に項目名が入り、再度 apply してもリンクが作られないこと。
-3. リポジトリで `dots apply` した後、リポジトリ外のディレクトリで `dots status` が記録したリポジトリを使い、`--repo` と `DOTS_REPO` がそれより優先されること。
+1. dots.toml からルールを消し、`dots status` が stale を表示し、`dots clean` で消え、`dots status` が stale を表示しなくなること。
+2. リポジトリで `dots apply` した後、リポジトリ外のディレクトリで `dots status` が記録したリポジトリを使い、`--repo` と `DOTS_REPO` がそれより優先されること。
 
-unlink の確認プロンプト（Yes／No、unlink の上位の配置先の確認、Ctrl-C で終了コード130）は、v0.1.0 と同じく Linux と macOS で expect を使って確認する。
+clean の確認プロンプト（Yes／No、Ctrl-C で終了コード130）は、v0.1.0 と同じく Linux と macOS で expect を使って確認する。
 
 ### 実装の順序（#9、#11 + #4、#6）
 
@@ -695,16 +589,16 @@ Wave 1（並行）
   C: #6 前半   AppDir の共通化・statefile パッケージ・apply での記録・stale 判定（5章、8.2）
 
 Wave 2（A、B、C をマージした後）
-  D: #6 後半   status の stale 表示・apply の案内・dots unlink --stale（7章、8.1、8.2）
+  D: #6 後半   status の stale 表示・apply の案内・dots clean（7章、8.1、8.2）
 ```
 
-D は、A の確認プロンプトの部品（`--stale` の Yes／No）と、B の `←` 表示（status の stale、unlink の `-` の行）を使うので、後に回す。
+D は、A の確認プロンプトの部品（clean の Yes／No）と、B の `←` 表示（status の stale、clean の `-` の行）を使うので、後に回す。
 
 ## 11. 未決事項と次のバージョンへの申し送り
 
 - 複数のdotfilesリポジトリを使い分ける場合の扱い。v0.2.0 では state の記録はリポジトリごとに分けて持ち、リポジトリの記録（4.2）は1つだけである。一時的な切り替えは `--repo` と `DOTS_REPO` で行う。
 - リポジトリを移動した後に、移動前の記録を新しい場所へ付け替える方法。
-- unlink 時に source の中身をコピーして残すオプション（dots の利用をやめる場合向け）。
-- 共通ルールを特定のOSでだけ無効にする書き方（例: `[dots.darwin]` の `"~/.vimrc" = false`、auto の OS ごとの ignore）。v0.2.0 の unlink は、共通ルールを書き換えると全OSで配置されなくなる（7.3）。このOSでだけ外したい場合は、今のスキーマでは書けない。
+- clean 時に source の中身をコピーして残すオプション（dots の利用をやめる場合向け）。
+- 共通ルールを特定のOSでだけ無効にする書き方（例: `[dots.darwin]` の `"~/.vimrc" = false`、auto の OS ごとの ignore）。共通ルールを消すと全OSで配置されなくなる。このOSでだけ外したい場合は、今のスキーマでは書けない。
 - `dots diff`（Issue #1 のコメントにあるヘルプ例）。
 - #10（apply で変化のなかった項目を折りたたむ設定）。v0.2.0 に入れるかは保留。入れる場合は、設定のキー（例: `[ui] fold_unchanged`）、折りたたむ件数の閾値、#9 の `←` 表示との組み合わせを仕様に加える。
