@@ -102,5 +102,12 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    dots apply
    ```
 
+   Each created (`+`) or replaced (`~`) link is shown with its source, relative to the repository root:
+   ```
+     + ~/.vimrc                  ← vimrc
+     ~ ~/.config/tmux            ← config/tmux
+     ✓ ~/.config/starship.toml
+   ```
+
 > [!IMPORTANT]
 > On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the `SeCreateSymbolicLinkPrivilege` (usually Administrator).

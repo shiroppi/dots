@@ -80,7 +80,7 @@ func TestDoctor(t *testing.T) {
 		t.Error("ok = true, want false")
 	}
 	checkContains(t, out,
-		"\u2713 "+p("home", "ok")+" -> "+p("src", "ok")+`  dots."ok"`,
+		"\u2713 "+p("home", "ok")+" \u2190 "+p("src", "ok")+`  dots."ok"`,
 		"\u00d7 "+p("home", "missing"),
 		"! wrong link "+p("home", "wrong"), "! conflict "+p("home", "conflict"), "! error "+p("home", "bad"),
 		"current link: ../elsewhere",
@@ -112,7 +112,8 @@ func TestDoctorOK(t *testing.T) {
 func TestPlan(t *testing.T) {
 	out := render(func(pr *Printer) { pr.Plan(testPlan()) })
 	checkContains(t, out,
-		"  \u2713 "+p("home", "ok")+"\n", "  + "+p("home", "missing")+"\n", "  ~ "+p("home", "wrong")+"\n",
+		"  \u2713 "+p("home", "ok")+"\n", "  + "+p("home", "missing")+" ", "  \u2190 "+p("src", "missing")+"\n",
+		"  ~ "+p("home", "wrong")+" ", "  \u2190 "+p("src", "wrong")+"\n",
 		"! error "+p("home", "bad"),
 		"existing symbolic link -> ../elsewhere; will be backed up and replaced after confirmation",
 		"existing file or directory; will be backed up and replaced after confirmation",
@@ -120,8 +121,8 @@ func TestPlan(t *testing.T) {
 		"Overridden rules:",
 		"1 to create, 2 to replace, 1 already ok, 1 error(s)",
 	)
-	if strings.Contains(out, `dots."ok"`) || strings.Contains(out, p("src", "ok")) {
-		t.Errorf("plan lines must not show mapping or origin:\n%s", out)
+	if strings.Contains(out, `dots."ok"`) || strings.Contains(out, p("src", "ok")) || strings.Contains(out, `dots."bad"`) || strings.Contains(out, p("src", "bad")) {
+		t.Errorf("unchanged and error rows must not show source or origin:\n%s", out)
 	}
 	noConf := render(func(pr *Printer) {
 		pr.Plan(&apply.Plan{Items: []apply.Item{item("m", state.NotExist, apply.ActionCreate, nil)}})
@@ -240,7 +241,7 @@ func TestPrinterHome(t *testing.T) {
 	var b bytes.Buffer
 	pr := &Printer{W: &b, Home: p("home")}
 	pr.Plan(&apply.Plan{Items: []apply.Item{item("m", state.NotExist, apply.ActionCreate, nil)}})
-	checkContains(t, b.String(), "  + ~"+string(filepath.Separator)+"m\n")
+	checkContains(t, b.String(), "  + ~"+string(filepath.Separator)+"m  \u2190 "+p("src", "m")+"\n")
 }
 
 func TestNoColorHasNoEscapes(t *testing.T) {
@@ -320,7 +321,7 @@ func TestReportWarning(t *testing.T) {
 
 func TestRepoRelativeSources(t *testing.T) {
 	out := render(func(pr *Printer) { pr.Root = root(); pr.Doctor(testPlan()) })
-	checkContains(t, out, "Repository: "+root()+"\n\n", " -> "+filepath.Join("src", "ok")+"  ")
+	checkContains(t, out, "Repository: "+root()+"\n\n", " \u2190 src/ok  ")
 	if strings.Contains(out, p("src", "ok")) {
 		t.Errorf("absolute source still shown:\n%s", out)
 	}

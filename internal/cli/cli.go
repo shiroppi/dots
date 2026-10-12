@@ -108,7 +108,17 @@ func ExitCode(err error, stderr io.Writer) int {
 }
 
 func (a *App) printer() *ui.Printer {
-	return &ui.Printer{W: a.Stdout, Color: a.Color, Home: a.Env.Home}
+	return &ui.Printer{W: a.Stdout, Color: a.Color, Home: a.Env.Home, Width: terminalWidth(a.Stdout)}
+}
+
+// terminalWidth is the column count of w when it is a terminal, else 0.
+func terminalWidth(w io.Writer) int {
+	if f, ok := w.(*os.File); ok {
+		if cols, _, err := term.GetSize(int(f.Fd())); err == nil {
+			return cols
+		}
+	}
+	return 0
 }
 
 // printerFor is printer with the repository root of res, for output that
