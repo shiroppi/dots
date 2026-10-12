@@ -23,6 +23,7 @@ type Printer struct {
 	Color bool   // false: plain text, no ANSI escapes
 	Home  string // when non-empty, paths under Home are shown as ~/... (display only)
 	Root  string // repository root (absolute); when set, sources under it are shown relative to it
+	Width int    // terminal width in columns; 0 when unknown (arrows are then always aligned)
 }
 
 type tone int
@@ -55,12 +56,12 @@ func (p *Printer) display(path string) string {
 	return displayPath(p.Home, path, hostOS)
 }
 
-// displaySource shows a source path relative to Root when it lies inside it,
-// and otherwise like any other path.
+// displaySource shows a source path relative to Root, with "/" separators,
+// when it lies inside it, and otherwise like any other path.
 func (p *Printer) displaySource(path string) string {
 	if p.Root != "" {
 		if rel, ok := relUnder(p.Root, path, hostOS); ok {
-			return rel
+			return filepath.ToSlash(rel)
 		}
 	}
 	return p.display(path)
@@ -187,9 +188,9 @@ func (p *Printer) itemLine(t tone, sym, word string, e model.Entry, suffix strin
 	p.printf("%s%s %s%s\n", itemIndent, p.paint(t, mark), p.display(e.Target), suffix)
 }
 
-// mapping is the doctor-only "-> source  origin" tail of an item line.
+// mapping is the doctor-only " ← source  origin" tail of an item line.
 func (p *Printer) mapping(e model.Entry) string {
-	return " -> " + p.displaySource(e.Source) + "  " + p.paint(toneDim, e.Origin.String())
+	return " " + p.paint(toneDim, arrow+" "+p.displaySource(e.Source)) + "  " + p.paint(toneDim, e.Origin.String())
 }
 
 // detail prints one line indented under its item.
@@ -257,7 +258,7 @@ func doctorMark(r state.Result) (t tone, sym, word string) {
 
 // Doctor prints the doctor report (spec §8). ok is false when any item is not
 // a valid link or has an error. doctor is the diagnostic view, so unlike
-// apply it keeps the mapping (-> source) and the origin of every rule.
+// apply it keeps the mapping (← source) and the origin of every rule.
 func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
 	p.header()
 	ok = true
@@ -308,25 +309,27 @@ func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
 func (p *Printer) Plan(plan *apply.Plan) {
 	p.header()
 	var nCreate, nSkip, nReplace, nErr int
+	l := p.newList()
 	for _, it := range plan.Items {
 		r := it.Result
 		switch it.Action {
 		case apply.ActionCreate:
 			nCreate++
-			p.itemLine(toneBlue, symCreate, "", r.Entry, "")
+			l.item(toneBlue, symCreate, "", r.Entry, true)
 		case apply.ActionSkip:
 			nSkip++
-			p.itemLine(toneGreen, symOK, "", r.Entry, "")
+			l.item(toneGreen, symOK, "", r.Entry, false)
 		case apply.ActionReplace:
 			nReplace++
-			p.itemLine(toneMagenta, symReplace, "", r.Entry, "")
-			p.detail(toneDim, describeExisting(r)+"; will be backed up and replaced after confirmation")
+			l.item(toneMagenta, symReplace, "", r.Entry, true)
+			l.detail(toneDim, describeExisting(r)+"; will be backed up and replaced after confirmation")
 		default:
 			nErr++
-			p.itemLine(toneYellow, symProblem, "error", r.Entry, "")
-			p.errorDetails(r.Err)
+			l.item(toneYellow, symProblem, "error", r.Entry, false)
+			l.errorDetails(r.Err)
 		}
 	}
+	l.flush()
 	p.overrides(plan.Overrides)
 	p.printf("\n")
 	if nCreate+nReplace+nErr == 0 {
@@ -365,33 +368,35 @@ func (p *Printer) Blocked(plan *apply.Plan) {
 func (p *Printer) Report(rep *apply.Report) {
 	p.header()
 	warnings := 0
+	l := p.newList()
 	for _, ir := range rep.Items {
 		e := ir.Item.Result.Entry
 		switch ir.Outcome {
 		case apply.Created:
-			p.itemLine(toneBlue, symCreate, "", e, "")
+			l.item(toneBlue, symCreate, "", e, true)
 		case apply.AlreadyOK:
-			p.itemLine(toneGreen, symOK, "", e, "")
+			l.item(toneGreen, symOK, "", e, false)
 		case apply.Replaced:
-			p.itemLine(toneMagenta, symReplace, "", e, "")
+			l.item(toneMagenta, symReplace, "", e, true)
 		case apply.SkippedByUser:
-			p.itemLine(toneYellow, symProblem, "skipped", e, "")
+			l.item(toneYellow, symProblem, "skipped", e, false)
 		case apply.Failed:
-			p.itemLine(toneYellow, symProblem, "failed", e, "")
+			l.item(toneYellow, symProblem, "failed", e, false)
 		default:
-			p.itemLine(toneYellow, symProblem, "not processed", e, "")
+			l.item(toneYellow, symProblem, "not processed", e, false)
 		}
 		if ir.Err != nil {
-			p.errorDetails(ir.Err)
+			l.errorDetails(ir.Err)
 		}
 		if ir.ArchivePath != "" {
-			p.detail(toneDim, "backup: "+p.display(ir.ArchivePath))
+			l.detail(toneDim, "backup: "+p.display(ir.ArchivePath))
 		}
 		if ir.Warning != nil {
-			p.detail(toneYellow, "warning: "+oneLine(ir.Warning.Error()))
+			l.detail(toneYellow, "warning: "+oneLine(ir.Warning.Error()))
 			warnings++
 		}
 	}
+	l.flush()
 	p.printf("\n")
 	if rep.Created()+rep.Replaced()+rep.SkippedByUser()+rep.Failed()+rep.NotProcessed() == 0 {
 		p.printf("%s\n", upToDate)

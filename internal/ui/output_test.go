@@ -77,11 +77,11 @@ func TestOutputDoctorVsPlan(t *testing.T) {
 	prDoc.Doctor(plan)
 	prPlan.Plan(plan)
 
-	if !strings.Contains(bufDoc.String(), " -> src  rule") {
+	if !strings.Contains(bufDoc.String(), " \u2190 src  rule") {
 		t.Errorf("doctor missing mapping and origin\ngot:\n%s", bufDoc.String())
 	}
-	if strings.Contains(bufPlan.String(), " -> src") || strings.Contains(bufPlan.String(), "rule") {
-		t.Errorf("plan should not have mapping and origin\ngot:\n%s", bufPlan.String())
+	if strings.Contains(bufPlan.String(), "rule") {
+		t.Errorf("plan should not have origin\ngot:\n%s", bufPlan.String())
 	}
 }
 

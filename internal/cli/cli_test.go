@@ -660,7 +660,7 @@ ignore = ["*.txt"]
 	if c := te.run("doctor"); c != 0 {
 		t.Errorf("doctor failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "✓ ") || !strings.Contains(te.out.String(), "ign -> ") {
+	if !strings.Contains(te.out.String(), "✓ ") || !strings.Contains(te.out.String(), "ign \u2190 ") {
 		t.Errorf("doctor output incorrect: %q", te.out.String())
 	}
 	te.out.Reset()
@@ -865,7 +865,7 @@ func TestCLIHeadersAndRelativeSources(t *testing.T) {
 	if !strings.Contains(out, "Repository: "+root()) {
 		t.Errorf("missing Repository header in doctor: %q", out)
 	}
-	if !strings.Contains(out, "-> "+relSrc+" ") {
+	if !strings.Contains(out, "\u2190 "+filepath.ToSlash(relSrc)+" ") {
 		t.Errorf("missing relative source in doctor: %q", out)
 	}
 
