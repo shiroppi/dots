@@ -204,7 +204,7 @@ func TestInit(t *testing.T) {
 
 func TestConfigDiscoveryAndMissing(t *testing.T) {
 	te := setupEnv(t)
-	code := te.run("doctor")
+	code := te.run("status")
 	if code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
@@ -218,13 +218,13 @@ func TestConfigDiscoveryAndMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	te.app.Env.Cwd = p("sub", "dir")
-	code = te.run("doctor")
+	code = te.run("status")
 	if code != 0 {
 		t.Errorf("want 0, got %d", code)
 	}
 }
 
-func TestDoctor(t *testing.T) {
+func TestStatus(t *testing.T) {
 	te := setupEnv(t)
 	toml := fmt.Sprintf(`[dots]
 "~/.a" = "a"
@@ -246,33 +246,44 @@ func TestDoctor(t *testing.T) {
 	}
 
 	snapBefore := snap(te.fsys, p())
-	code := te.run("doctor")
+	code := te.run("status")
 	if code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
 	if !strings.Contains(te.out.String(), "× ") {
 		t.Errorf("want missing mark, got %q", te.out.String())
 	}
-	outStr := strings.ToLower(te.out.String())
-	if !strings.Contains(outStr, "overridden") {
-		t.Errorf("want overrides section, got %q", te.out.String())
+	if strings.Contains(te.out.String(), "\u2190") || strings.Contains(te.out.String(), "dots.") {
+		t.Errorf("default status must not show sources or origins, got %q", te.out.String())
+	}
+	if strings.Contains(strings.ToLower(te.out.String()), "overridden") {
+		t.Errorf("default status must not show overridden rules, got %q", te.out.String())
 	}
 	snapAfter := snap(te.fsys, p())
 	if snapBefore != snapAfter {
-		t.Errorf("doctor modified fs")
+		t.Errorf("status modified fs")
+	}
+
+	if c := te.run("status", "--verbose"); c != 1 {
+		t.Errorf("verbose: want 1, got %d", c)
+	}
+	for _, want := range []string{"\u2190 a", "\u2190 b2", `dots."~/.a"`, "Overridden rules:"} {
+		if !strings.Contains(te.out.String(), want) {
+			t.Errorf("verbose status lacks %q, got %q", want, te.out.String())
+		}
 	}
 
 	if c := te.run("apply"); c != 0 {
 		t.Fatal("apply failed")
 	}
-	if c := te.run("doctor"); c != 0 {
+	if c := te.run("status"); c != 0 {
 		t.Errorf("want 0, got %d", c)
 	}
 
 	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"/etc/x" = "x"`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	code = te.run("doctor")
+	code = te.run("status")
 	if code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
@@ -451,8 +462,8 @@ func TestApply(t *testing.T) {
 	// The earlier rules are gone from dots.toml; a fresh state file keeps
 	// their links from showing up as stale.
 	te.app.StatePath = p("state2", "state.json")
-	if c := te.run("doctor"); c != 0 {
-		t.Errorf("want 0 for doctor with no backup dir, got %d", c)
+	if c := te.run("status"); c != 0 {
+		t.Errorf("want 0 for status with no backup dir, got %d", c)
 	}
 
 	te.app.Interactive = false
@@ -679,11 +690,11 @@ ignore = ["*.txt"]
 		t.Errorf("expected symlink created: %v", err)
 	}
 	te.out.Reset()
-	if c := te.run("doctor"); c != 0 {
-		t.Errorf("doctor failed: %d", c)
+	if c := te.run("status", "--verbose"); c != 0 {
+		t.Errorf("status failed: %d", c)
 	}
 	if !strings.Contains(te.out.String(), "✓ ") || !strings.Contains(te.out.String(), "ign \u2190 ") {
-		t.Errorf("doctor output incorrect: %q", te.out.String())
+		t.Errorf("status output incorrect: %q", te.out.String())
 	}
 	te.out.Reset()
 	if c := te.run("apply"); c != 0 {
@@ -727,8 +738,8 @@ Usage:
 
 Core:
   apply       Apply dotfiles
-  doctor      Check configuration and managed files
-  unlink      Remove links that are no longer in dots.toml
+  status      Show the status of managed files
+  clean       Remove links that are no longer in dots.toml
 
 Usability:
   init        Initialize a dotfiles repository
@@ -769,16 +780,16 @@ func TestHelp(t *testing.T) {
 
 	te.run("--help")
 	out := te.out.String()
-	for _, word := range []string{"completion", "status", "Plugin"} {
+	for _, word := range []string{"completion", "doctor", "unlink", "Plugin"} {
 		if strings.Contains(out, word) {
 			t.Errorf("root help should not contain %q", word)
 		}
 	}
 	idx1 := strings.Index(out, "apply")
-	idx2 := strings.Index(out, "doctor")
-	idx3 := strings.Index(out, "init")
-	idx4 := strings.Index(out, "restore")
-	idx5 := strings.Index(out, "edit")
+	idx2 := strings.Index(out, "status")
+	idx3 := strings.Index(out, "clean")
+	idx4 := strings.Index(out, "init")
+	idx5 := strings.Index(out, "restore")
 	if idx1 >= idx2 || idx2 >= idx3 || idx3 >= idx4 || idx4 >= idx5 {
 		t.Errorf("wrong command order in root help")
 	}
@@ -838,7 +849,7 @@ func TestUsageErrors(t *testing.T) {
 	if err := te.fsys.MkdirAll(p("empty"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if code := te.run("doctor"); code != 1 {
+	if code := te.run("status"); code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
 	errStr := te.errOut.String()
@@ -858,7 +869,7 @@ func TestUsageErrors(t *testing.T) {
 	}
 	te.out.Reset()
 	te.errOut.Reset()
-	if code := te.run("doctor"); code != 1 {
+	if code := te.run("status"); code != 1 {
 		t.Errorf("want 1, got %d", code)
 	}
 	if te.errOut.Len() != 0 {
@@ -880,16 +891,16 @@ func TestCLIHeadersAndRelativeSources(t *testing.T) {
 
 	relSrc := filepath.Join("a", "b")
 
-	// Doctor
-	if c := te.run("doctor"); c != 1 {
+	// Status
+	if c := te.run("status", "--verbose"); c != 1 {
 		t.Errorf("want 1, got %d", c)
 	}
 	out := te.out.String()
 	if !strings.Contains(out, "Repository: "+root()) {
-		t.Errorf("missing Repository header in doctor: %q", out)
+		t.Errorf("missing Repository header in status: %q", out)
 	}
 	if !strings.Contains(out, "\u2190 "+filepath.ToSlash(relSrc)+" ") {
-		t.Errorf("missing relative source in doctor: %q", out)
+		t.Errorf("missing relative source in status: %q", out)
 	}
 
 	// Apply dry-run
@@ -928,5 +939,15 @@ func TestCLIHeadersAndRelativeSources(t *testing.T) {
 	out = te.out.String()
 	if strings.Contains(out, "Repository:") {
 		t.Errorf("unexpected Repository header in restore --dry-run: %q", out)
+	}
+}
+
+func TestDoctorIsUnknownCommand(t *testing.T) {
+	te := setupEnv(t)
+	if c := te.run("doctor"); c == 0 {
+		t.Errorf("doctor must not be a command, got exit %d", c)
+	}
+	if !strings.Contains(te.errOut.String(), "unknown command") {
+		t.Errorf("want unknown command error, got %q", te.errOut.String())
 	}
 }

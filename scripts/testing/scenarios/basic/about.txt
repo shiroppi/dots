@@ -1,11 +1,12 @@
 Happy path: overrides, ignore patterns, os_only, two auto rules. Empty home.
 
 Try:
-  dots doctor            exit 1: every target is missing (×); overrides are listed
+  dots status            exit 1: every target is missing (×)
+  dots status --verbose  same, plus ← source, rule origin and the overridden rules
   dots apply --dry-run   everything is "+" (create); nothing changes
   dots apply             exit 0, no prompt
   dots apply             second run: everything is already linked (idempotent)
-  dots doctor            exit 0
+  dots status            exit 0
   ls -la ~ ~/.config ~/.local/bin build
 
 Check:

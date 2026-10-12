@@ -10,7 +10,7 @@ Home before apply:
   ~/.config/starship.toml   already the right link (skipped)
 
 Try:
-  dots doctor              exit 1: 6 conflicts (!), the rest missing or ok
+  dots status              exit 1: 6 conflicts (!), the rest missing or ok
   dots apply --dry-run     6 conflicts listed; nothing changes
   dots apply < /dev/null   no TTY: exits without changing anything
   dots apply               prompt per conflict: Yes or No, or tick "Process the rest" (Down, Space)

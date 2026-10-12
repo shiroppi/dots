@@ -1,7 +1,7 @@
 Rules resolve, but some sources/targets are unusable on disk.
 
 Try:
-  dots doctor           exit 1: "! error" for each bad entry, the rest listed
+  dots status           exit 1: "! error" for each bad entry, the rest listed
   dots apply            refuses to start; ~/.vimrc and ~/.config/nvim are NOT
                         created even though they are fine
   dots apply --dry-run  same errors

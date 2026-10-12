@@ -6,7 +6,7 @@ Scenarios for trying dots by hand, and a script that unpacks one into a temporar
 scripts/testing/sandbox.sh --list                 # list scenarios
 scripts/testing/sandbox.sh basic                  # unpack basic and open $SHELL in it
 scripts/testing/sandbox.sh --keep conflicts       # keep the temporary directory after exit
-scripts/testing/sandbox.sh basic -- dots doctor   # run a command instead of opening a shell
+scripts/testing/sandbox.sh basic -- dots status   # run a command instead of opening a shell
 SHELL=bash scripts/testing/sandbox.sh conflicts   # open a different shell
 ```
 
@@ -34,7 +34,7 @@ Every run rebuilds dots and starts from a clean state, so after changing the cod
 | config-errors | Valid TOML that breaks almost every validation rule; checks that all problems are reported at once |
 | resolve-errors | Errors while expanding rules: same-priority duplicates (including three auto rules producing one target), parent/child conflicts, `~` and `.` as targets, os_only nested too deep, and bad auto sources (missing, a file, broken symlink, symlink loop, FIFO) |
 | plan-errors | Rules resolve, but the disk state stops apply: missing, broken or FIFO sources, a parent that is a file or a symlink, a FIFO at the target, and overlapping source and target |
-| stale | Links left behind by rules removed from dots.toml: one still as dots created it, one replaced by a regular file, one already gone. For `dots doctor`, the stale hint of `dots apply`, `dots unlink --stale` and a broken state file |
+| stale | Links left behind by rules removed from dots.toml: one still as dots created it, one replaced by a regular file, one already gone. For `dots status`, the stale hint of `dots apply`, `dots clean` and a broken state file |
 | empty | An empty directory, to try `dots init` |
 
 Steps to try and the expected results for each scenario are in `scenarios/<name>/about.txt`, which is also printed when the sandbox opens.

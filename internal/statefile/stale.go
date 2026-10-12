@@ -82,7 +82,7 @@ func Classify(fsys fs.Manager, goos string, links []Link, repoRoot string, curre
 }
 
 // Inspect classifies l by the current state of its target, with Lstat and
-// Readlink only. It does not check whether l is stale; unlink uses it to
+// Readlink only. It does not check whether l is stale; clean uses it to
 // re-check a record right before acting.
 func Inspect(fsys fs.Manager, goos string, l Link) (Stale, error) {
 	s := Stale{Record: l}

@@ -1,5 +1,5 @@
 # Scenario "plan-errors": the rules resolve, but some targets or sources are
-# unusable on disk. apply refuses to start; doctor reports each one.
+# unusable on disk. apply refuses to start; status reports each one.
 
 [dots]
 # Fine on their own: they show that apply changes nothing when any entry fails.

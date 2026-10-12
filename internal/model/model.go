@@ -54,7 +54,7 @@ type Entry struct {
 }
 
 // Override records a lower-priority candidate that was discarded because a
-// higher-priority rule produced the same target (spec §5.5). doctor and the
+// higher-priority rule produced the same target (spec §5.5). status and the
 // apply Plan display these.
 type Override struct {
 	Target string

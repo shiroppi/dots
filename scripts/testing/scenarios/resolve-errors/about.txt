@@ -1,7 +1,7 @@
 dots.toml parses, but expanding it fails: duplicates, nesting, bad sources.
 
 Try:
-  dots doctor   exit 1: all problems at once
+  dots status   exit 1: all problems at once
   dots apply    same; nothing is created
 
 Expect:

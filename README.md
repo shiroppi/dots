@@ -112,18 +112,18 @@ go install github.com/shiroppi/dots/cmd/dots@latest
 
 <!-- ### Stale links -->
 <!---->
-<!-- `dots apply` records the links it creates in a state file (`$XDG_STATE_HOME/dots/state.json`, `~/.local/state/dots/state.json` by default; `~/Library/Application Support/dots/state.json` on macOS; `%LOCALAPPDATA%\dots\state.json` on Windows). When you remove a rule from `dots.toml`, its link stays in place and becomes *stale*. `dots doctor` lists stale links (and exits with 1), and `dots apply` mentions how many there are, but neither removes them: -->
+<!-- `dots apply` records the links it creates in a state file (`$XDG_STATE_HOME/dots/state.json`, `~/.local/state/dots/state.json` by default; `~/Library/Application Support/dots/state.json` on macOS; `%LOCALAPPDATA%\dots\state.json` on Windows). When you remove a rule from `dots.toml`, its link stays in place and becomes *stale*. `dots status` lists stale links (and exits with 1), and `dots apply` mentions how many there are, but neither removes them: -->
 <!---->
 <!-- ``` -->
-<!--   ! stale ~/.config/tmux  ← config/tmux -->
+<!--   ! stale ~/.config/tmux ← config/tmux -->
 <!--     not in dots.toml; created by dots on 2026-10-01 -->
 <!--   ! stale ~/.zshrc -->
 <!--     changed since dots created it; dots will not remove it -->
 <!---->
-<!-- Run "dots unlink --stale" to remove stale links. -->
+<!-- Run "dots clean" to remove stale links. -->
 <!-- ``` -->
 <!---->
-<!-- `dots unlink --stale` lists them and asks before removing (`--yes` skips the question, `--dry-run` only shows what would happen). It removes only symbolic links whose link text is still the one dots recorded; a stale path that has since become a regular file, a directory or a different link is left alone and just forgotten, and parent directories are never removed. -->
+<!-- `dots clean` lists them and asks before removing (`--no-confirm` skips the question, `--dry-run` only shows what would happen). It removes only symbolic links whose link text is still the one dots recorded; a stale path that has since become a regular file, a directory or a different link is left alone and just forgotten, and parent directories are never removed. -->
 <!---->
 <!-- Limitations: -->
 <!---->

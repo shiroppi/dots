@@ -42,9 +42,9 @@ run() { # run <expected-exit> args...
 }
 
 run 0 --version
-run 1 doctor
+run 1 status
 run 0 apply
-run 0 doctor
+run 0 status
 
 # Verify created link is a symlink pointing at a relative path.
 check_link() {
@@ -64,28 +64,28 @@ check_link "$FAKEHOME/.config/sub"
 
 # Idempotency.
 run 0 apply
-run 0 doctor
+run 0 status
 check_link "$FAKEHOME/.vimrc"
 check_link "$FAKEHOME/.config/sub"
 
-# Stale links: remove a rule from dots.toml. doctor reports its link and
-# exits 1, unlink --stale removes it, and doctor is clean again.
+# Stale links: remove a rule from dots.toml. status reports its link and
+# exits 1, clean removes it, and status is clean again.
 cat > "$REPO/dots.toml" <<'TOML'
 [[auto]]
 source = "config"
 target = "~/.config"
 TOML
 check_link "$FAKEHOME/.vimrc"
-run 1 doctor
-"$BIN" doctor > "$WORK/doctor.txt" || true
-grep -q "stale" "$WORK/doctor.txt" || { echo "FAIL: doctor does not report the stale link" >&2; cat "$WORK/doctor.txt" >&2; exit 1; }
-run 0 unlink --stale --dry-run
+run 1 status
+"$BIN" status > "$WORK/status.txt" || true
+grep -q "stale" "$WORK/status.txt" || { echo "FAIL: status does not report the stale link" >&2; cat "$WORK/status.txt" >&2; exit 1; }
+run 0 clean --dry-run
 [ -L "$FAKEHOME/.vimrc" ] || { echo "FAIL: --dry-run removed the link" >&2; exit 1; }
-run 0 unlink --stale --yes
+run 0 clean --no-confirm
 [ ! -e "$FAKEHOME/.vimrc" ] && [ ! -L "$FAKEHOME/.vimrc" ] || { echo "FAIL: stale link was not removed" >&2; exit 1; }
 [ -f "$REPO/vimrc" ] || { echo "FAIL: source file was removed" >&2; exit 1; }
 check_link "$FAKEHOME/.config/sub"
-run 0 doctor
-"$BIN" doctor > "$WORK/doctor.txt"
-if grep -q "stale" "$WORK/doctor.txt"; then echo "FAIL: doctor still reports stale links" >&2; cat "$WORK/doctor.txt" >&2; exit 1; fi
+run 0 status
+"$BIN" status > "$WORK/status.txt"
+if grep -q "stale" "$WORK/status.txt"; then echo "FAIL: status still reports stale links" >&2; cat "$WORK/status.txt" >&2; exit 1; fi
 echo "smoke OK"

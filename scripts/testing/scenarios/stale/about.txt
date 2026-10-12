@@ -8,24 +8,23 @@ Home before you start (setup.sh ran dots apply, then removed three rules):
   ~/.local/state/dots/state.json   records of all four links
 
 Try:
-  dots doctor                   exit 1: "! stale ~/.vimrc  ← vimrc" and
+  dots status --verbose         exit 1: "! stale ~/.vimrc ← vimrc" and
                                 "! stale ~/.zshrc" (changed; dots will not remove it)
   dots apply                    removes nothing; prints the stale count and
-                                Run "dots unlink --stale" to remove them.
-  dots unlink --stale --dry-run lists what would happen; nothing changes
-  dots unlink --stale < /dev/null
-                                no TTY and no --yes: error, nothing changes
-  dots unlink --stale           Yes/No prompt (cursor starts on No);
+                                Run "dots clean" to remove them.
+  dots clean --dry-run          lists what would happen; nothing changes
+  dots clean < /dev/null
+                                no TTY and no --no-confirm: error, nothing changes
+  dots clean                    Yes/No prompt (cursor starts on No);
                                 Ctrl-C exits 130 and changes nothing
-  dots unlink --stale           again, answer Yes (Up, Enter)
-  dots doctor                   exit 0: no stale items left
-  dots unlink                   usage error (exit 2)
-  dots unlink ~/.vimrc          "not implemented yet" (exit 1)
+  dots clean                    again, answer Yes (Up, Enter)
+  dots status                   exit 0: no stale items left
+  dots clean ~/.vimrc           usage error (exit 2): clean takes no arguments
 
 Check:
   - Only ~/.vimrc is removed. ~/.zshrc (your regular file) and ~/.gitconfig
     are untouched, and repo/vimrc still exists.
   - cat ~/.local/state/dots/state.json: only ~/.gitconfig is left.
-  - echo broken > ~/.local/state/dots/state.json; dots doctor
+  - echo broken > ~/.local/state/dots/state.json; dots status
                                 "! error" for the state file, exit 1
     dots apply                  moves it to state.json.broken-<time> and starts over

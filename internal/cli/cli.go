@@ -1,4 +1,4 @@
-// Package cli wires the dots commands (init, doctor, apply, restore, edit)
+// Package cli wires the dots commands (init, status, apply, clean, restore, edit)
 // to the config, resolve, apply, backup and ui packages.
 package cli
 
@@ -266,7 +266,7 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
 	root.AddGroup(&cobra.Group{ID: "core", Title: "Core:"}, &cobra.Group{ID: "usability", Title: "Usability:"})
-	root.AddCommand(newApplyCmd(app), newDoctorCmd(app), newUnlinkCmd(app), newInitCmd(app), newRestoreCmd(app), newEditCmd(app))
+	root.AddCommand(newApplyCmd(app), newStatusCmd(app), newCleanCmd(app), newInitCmd(app), newRestoreCmd(app), newEditCmd(app))
 	for _, c := range root.Commands() {
 		c.Flags().BoolP("help", "h", false, "Show help")
 		if inner := c.Args; inner != nil {
@@ -342,10 +342,11 @@ func newInitCmd(app *App) *cobra.Command {
 	}
 }
 
-func newDoctorCmd(app *App) *cobra.Command {
-	return &cobra.Command{
-		Use:     "doctor",
-		Short:   "Check configuration and managed files",
+func newStatusCmd(app *App) *cobra.Command {
+	var verbose bool
+	cmd := &cobra.Command{
+		Use:     "status",
+		Short:   "Show the status of managed files",
 		GroupID: "core",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -355,12 +356,14 @@ func newDoctorCmd(app *App) *cobra.Command {
 			}
 			plan := apply.BuildPlan(app.FS, res)
 			sr, stateOK := app.staleReport(res)
-			if !app.printerFor(res).DoctorState(plan, sr) || !stateOK {
+			if !app.printerFor(res).StatusState(plan, sr, verbose) || !stateOK {
 				return silentError{}
 			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show the source and rule of each row, and overridden rules")
+	return cmd
 }
 
 func newApplyCmd(app *App) *cobra.Command {

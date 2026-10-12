@@ -1,5 +1,5 @@
 // Package apply builds and executes link plans (spec §6, §8). Planning is
-// side-effect free so doctor and apply --dry-run share it with apply.
+// side-effect free so status and apply --dry-run share it with apply.
 package apply
 
 import (

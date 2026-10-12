@@ -50,10 +50,16 @@ func (te *testEnv) interactive(answer int) {
 	}
 }
 
-func TestDoctorShowsStale(t *testing.T) {
+func TestStatusShowsStale(t *testing.T) {
 	te := staleSetup(t)
 	before := snap(te.fsys, p("state"))
-	if c := te.run("doctor"); c != 1 {
+	if c := te.run("status"); c != 1 {
+		t.Fatalf("want 1, got %d", c)
+	}
+	if strings.Contains(te.out.String(), "←") {
+		t.Errorf("default status shows a source:\n%s", te.out)
+	}
+	if c := te.run("status", "--verbose"); c != 1 {
 		t.Fatalf("want 1, got %d", c)
 	}
 	out := te.out.String()
@@ -61,19 +67,19 @@ func TestDoctorShowsStale(t *testing.T) {
 		"! stale ~/.b",
 		"← b",
 		"not in dots.toml; created by dots on 2026-10-07",
-		`Run "dots unlink --stale" to remove stale links.`,
+		`Run "dots clean" to remove stale links.`,
 		"1 ok, 1 stale",
 	} {
 		if !strings.Contains(out, want) {
-			t.Errorf("doctor output lacks %q:\n%s", want, out)
+			t.Errorf("status output lacks %q:\n%s", want, out)
 		}
 	}
 	if before != snap(te.fsys, p("state")) || !te.recorded(t, p("home", ".b")) {
-		t.Error("doctor changed the state")
+		t.Error("status changed the state")
 	}
 }
 
-func TestDoctorStaleChangedAndGone(t *testing.T) {
+func TestStatusStaleChangedAndGone(t *testing.T) {
 	te := staleSetup(t)
 	te.write(t, p("b2"), "x")
 	te.write(t, p("dots.toml"), "[dots]\n\"~/.a\" = \"a\"\n\"~/.c\" = \"b2\"\n")
@@ -89,7 +95,7 @@ func TestDoctorStaleChangedAndGone(t *testing.T) {
 	if err := te.fsys.Remove(p("home", ".c")); err != nil {
 		t.Fatal(err)
 	}
-	if c := te.run("doctor"); c != 1 {
+	if c := te.run("status"); c != 1 {
 		t.Fatalf("want 1, got %d", c)
 	}
 	out := te.out.String()
@@ -106,12 +112,12 @@ func TestDoctorStaleChangedAndGone(t *testing.T) {
 	}
 }
 
-func TestDoctorOnlyGoneIsClean(t *testing.T) {
+func TestStatusOnlyGoneIsClean(t *testing.T) {
 	te := staleSetup(t)
 	if err := te.fsys.Remove(p("home", ".b")); err != nil {
 		t.Fatal(err)
 	}
-	if c := te.run("doctor"); c != 0 {
+	if c := te.run("status"); c != 0 {
 		t.Fatalf("want 0, got %d\n%s", c, te.out)
 	}
 	if strings.Contains(te.out.String(), "stale") {
@@ -119,7 +125,7 @@ func TestDoctorOnlyGoneIsClean(t *testing.T) {
 	}
 }
 
-func TestDoctorIgnoresOtherRepositories(t *testing.T) {
+func TestStatusIgnoresOtherRepositories(t *testing.T) {
 	te := staleSetup(t)
 	st := te.loadState(t)
 	st.Record(statefile.Link{Target: p("home", ".other"), Link: "x", Repository: p("elsewhere"), Source: "x", RecordedAt: stateT0})
@@ -127,30 +133,30 @@ func TestDoctorIgnoresOtherRepositories(t *testing.T) {
 		t.Fatal(err)
 	}
 	te.write(t, p("home", ".other"), "")
-	te.run("doctor")
+	te.run("status")
 	if strings.Contains(te.out.String(), ".other") {
 		t.Errorf("record of another repository shown:\n%s", te.out)
 	}
 }
 
-func TestDoctorBrokenAndNewerState(t *testing.T) {
+func TestStatusBrokenAndNewerState(t *testing.T) {
 	te := staleSetup(t)
 	if err := te.fsys.MkdirAll(filepath.Dir(te.app.StatePath), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	te.write(t, te.app.StatePath, "{garbage")
-	if c := te.run("doctor"); c != 1 {
+	if c := te.run("status"); c != 1 {
 		t.Fatalf("broken: want 1, got %d", c)
 	}
 	if !strings.Contains(te.out.String(), "! error") || !strings.Contains(te.out.String(), "unreadable") {
 		t.Errorf("broken state not reported:\n%s", te.out)
 	}
 	if data, _ := dotsfs.ReadFile(te.fsys, te.app.StatePath); string(data) != "{garbage" {
-		t.Errorf("doctor rewrote the state: %q", data)
+		t.Errorf("status rewrote the state: %q", data)
 	}
 
 	te.write(t, te.app.StatePath, `{"version":2,"links":[]}`)
-	if c := te.run("doctor"); c != 0 {
+	if c := te.run("status"); c != 0 {
 		t.Fatalf("newer: want 0, got %d\n%s%s", c, te.out, te.errOut)
 	}
 	if !strings.Contains(te.errOut.String(), "warning") || !strings.Contains(te.errOut.String(), "newer dots") {
@@ -164,7 +170,7 @@ func TestApplyReportsStale(t *testing.T) {
 		t.Fatalf("apply: %d %s", c, te.errOut)
 	}
 	out := te.out.String()
-	if !strings.Contains(out, "1 stale link(s) found.") || !strings.Contains(out, `Run "dots unlink --stale" to remove them.`) {
+	if !strings.Contains(out, "1 stale link(s) found.") || !strings.Contains(out, `Run "dots clean" to remove them.`) {
 		t.Errorf("missing stale notice:\n%s", out)
 	}
 	if strings.Index(out, "already ok") > strings.Index(out, "stale link(s)") {
@@ -183,14 +189,14 @@ func TestApplyWithoutStaleHasNoNotice(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleDryRun(t *testing.T) {
+func TestCleanDryRun(t *testing.T) {
 	te := staleSetup(t)
 	before := snap(te.fsys, p("state")) + snap(te.fsys, p("home"))
-	if c := te.run("unlink", "--stale", "--dry-run"); c != 0 {
+	if c := te.run("clean", "--dry-run"); c != 0 {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	out := te.out.String()
-	for _, want := range []string{"- stale ~/.b", "← b", "1 to unlink", "dry run: nothing was changed"} {
+	for _, want := range []string{"- stale ~/.b", "← b", "1 to remove", "dry run: nothing was changed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -200,13 +206,13 @@ func TestUnlinkStaleDryRun(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleYes(t *testing.T) {
+func TestCleanYes(t *testing.T) {
 	te := staleSetup(t)
-	if c := te.run("unlink", "--stale", "--yes"); c != 0 {
+	if c := te.run("clean", "--no-confirm"); c != 0 {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	out := te.out.String()
-	for _, want := range []string{"- stale ~/.b", "← b", "1 unlinked"} {
+	for _, want := range []string{"- stale ~/.b", "← b", "1 removed"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("lacks %q:\n%s", want, out)
 		}
@@ -223,32 +229,32 @@ func TestUnlinkStaleYes(t *testing.T) {
 	if te.recorded(t, p("home", ".b")) {
 		t.Error("record not removed")
 	}
-	if c := te.run("doctor"); c != 0 || strings.Contains(te.out.String(), "stale") {
-		t.Errorf("doctor after unlink: %d\n%s", c, te.out)
+	if c := te.run("status"); c != 0 || strings.Contains(te.out.String(), "stale") {
+		t.Errorf("status after clean: %d\n%s", c, te.out)
 	}
 }
 
-func TestUnlinkStaleKeepsParentDirectories(t *testing.T) {
+func TestCleanKeepsParentDirectories(t *testing.T) {
 	te := stateSetup(t)
 	te.write(t, p("dots.toml"), "[dots]\n\"~/.a\" = \"a\"\n\"~/.config/x/y\" = \"a\"\n")
 	if c := te.run("apply"); c != 0 {
 		t.Fatalf("apply: %d %s", c, te.errOut)
 	}
 	te.write(t, p("dots.toml"), "[dots]\n\"~/.a\" = \"a\"\n")
-	if c := te.run("unlink", "--stale", "--yes"); c != 0 {
-		t.Fatalf("unlink: %d %s", c, te.errOut)
+	if c := te.run("clean", "--no-confirm"); c != 0 {
+		t.Fatalf("clean: %d %s", c, te.errOut)
 	}
 	if ok, _ := dotsfs.Exists(te.fsys, p("home", ".config", "x")); !ok {
 		t.Error("parent directory was removed")
 	}
 }
 
-func TestUnlinkStaleNonInteractiveNeedsYes(t *testing.T) {
+func TestCleanNonInteractiveNeedsYes(t *testing.T) {
 	te := staleSetup(t)
-	if c := te.run("unlink", "--stale"); c != 1 {
+	if c := te.run("clean"); c != 1 {
 		t.Fatalf("want 1, got %d", c)
 	}
-	if !strings.Contains(te.errOut.String(), "--yes") || !strings.Contains(te.errOut.String(), "nothing was changed") {
+	if !strings.Contains(te.errOut.String(), "--no-confirm") || !strings.Contains(te.errOut.String(), "nothing was changed") {
 		t.Errorf("stderr: %q", te.errOut)
 	}
 	if !te.isLink(p("home", ".b")) || !te.recorded(t, p("home", ".b")) {
@@ -256,7 +262,7 @@ func TestUnlinkStaleNonInteractiveNeedsYes(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleConfirmation(t *testing.T) {
+func TestCleanConfirmation(t *testing.T) {
 	var asked ui.Question
 	te := staleSetup(t)
 	te.app.Interactive = true
@@ -264,7 +270,7 @@ func TestUnlinkStaleConfirmation(t *testing.T) {
 		asked = q
 		return ui.Answer{Choice: 1}, nil
 	}
-	if c := te.run("unlink", "--stale"); c != 0 {
+	if c := te.run("clean"); c != 0 {
 		t.Fatalf("No: want 0, got %d", c)
 	}
 	if asked.Initial != 1 || len(asked.Options) != 2 || !strings.HasPrefix(asked.Options[0], "Yes") || !strings.HasPrefix(asked.Options[1], "No") {
@@ -278,7 +284,7 @@ func TestUnlinkStaleConfirmation(t *testing.T) {
 	}
 
 	te.interactive(0)
-	if c := te.run("unlink", "--stale"); c != 0 {
+	if c := te.run("clean"); c != 0 {
 		t.Fatalf("Yes: want 0, got %d %s", c, te.errOut)
 	}
 	if te.isLink(p("home", ".b")) || te.recorded(t, p("home", ".b")) {
@@ -287,16 +293,16 @@ func TestUnlinkStaleConfirmation(t *testing.T) {
 	if strings.Count(te.out.String(), "- stale ~/.b") != 1 {
 		t.Errorf("the list should not be printed again after the question:\n%s", te.out)
 	}
-	if !strings.Contains(te.out.String(), "1 unlinked") {
+	if !strings.Contains(te.out.String(), "1 removed") {
 		t.Errorf("no summary:\n%s", te.out)
 	}
 }
 
-func TestUnlinkStaleAbort(t *testing.T) {
+func TestCleanAbort(t *testing.T) {
 	te := staleSetup(t)
 	te.app.Interactive = true
 	te.app.Ask = func(ui.Question) (ui.Answer, error) { return ui.Answer{}, ui.ErrAborted }
-	if c := te.run("unlink", "--stale"); c != 130 {
+	if c := te.run("clean"); c != 130 {
 		t.Fatalf("want 130, got %d", c)
 	}
 	if !te.isLink(p("home", ".b")) || !te.recorded(t, p("home", ".b")) {
@@ -304,7 +310,7 @@ func TestUnlinkStaleAbort(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleRecheckSkips(t *testing.T) {
+func TestCleanRecheckSkips(t *testing.T) {
 	te := staleSetup(t)
 	te.app.Interactive = true
 	te.app.Ask = func(ui.Question) (ui.Answer, error) {
@@ -317,7 +323,7 @@ func TestUnlinkStaleRecheckSkips(t *testing.T) {
 		}
 		return ui.Answer{Choice: 0}, nil
 	}
-	if c := te.run("unlink", "--stale"); c != 0 {
+	if c := te.run("clean"); c != 0 {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	if got, _ := te.fsys.Readlink(p("home", ".b")); got != "elsewhere" {
@@ -331,7 +337,7 @@ func TestUnlinkStaleRecheckSkips(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleChangedAndGone(t *testing.T) {
+func TestCleanChangedAndGone(t *testing.T) {
 	te := staleSetup(t)
 	te.write(t, p("c"), "c")
 	te.write(t, p("dots.toml"), "[dots]\n\"~/.a\" = \"a\"\n\"~/.b\" = \"b\"\n\"~/.c\" = \"c\"\n\"~/.d\" = \"c\"\n")
@@ -348,7 +354,7 @@ func TestUnlinkStaleChangedAndGone(t *testing.T) {
 		t.Fatal(err)
 	}
 	te.interactive(0)
-	if c := te.run("unlink", "--stale"); c != 0 {
+	if c := te.run("clean"); c != 0 {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	out := te.out.String()
@@ -371,13 +377,13 @@ func TestUnlinkStaleChangedAndGone(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleOnlyChangedNeedsNoConfirmation(t *testing.T) {
+func TestCleanOnlyChangedNeedsNoConfirmation(t *testing.T) {
 	te := staleSetup(t)
 	if err := te.fsys.Remove(p("home", ".b")); err != nil {
 		t.Fatal(err)
 	}
 	te.write(t, p("home", ".b"), "mine")
-	if c := te.run("unlink", "--stale"); c != 0 {
+	if c := te.run("clean"); c != 0 {
 		t.Fatalf("want 0, got %d %s", c, te.errOut)
 	}
 	if te.recorded(t, p("home", ".b")) {
@@ -385,15 +391,15 @@ func TestUnlinkStaleOnlyChangedNeedsNoConfirmation(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleNothing(t *testing.T) {
+func TestCleanNothing(t *testing.T) {
 	te := stateSetup(t)
 	te.run("apply")
-	if c := te.run("unlink", "--stale"); c != 0 || !strings.Contains(te.out.String(), "No stale links.") {
+	if c := te.run("clean"); c != 0 || !strings.Contains(te.out.String(), "No stale links.") {
 		t.Errorf("%d %q", c, te.out)
 	}
 }
 
-func TestUnlinkStaleStateProblems(t *testing.T) {
+func TestCleanStateProblems(t *testing.T) {
 	for name, tc := range map[string]struct{ doc, msg string }{
 		"broken": {"{garbage", "nothing was removed"},
 		"newer":  {`{"version":2,"links":[]}`, "refusing to change anything"},
@@ -401,7 +407,7 @@ func TestUnlinkStaleStateProblems(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			te := staleSetup(t)
 			te.write(t, te.app.StatePath, tc.doc)
-			for _, args := range [][]string{{"unlink", "--stale", "--yes"}, {"unlink", "--stale", "--dry-run"}} {
+			for _, args := range [][]string{{"clean", "--no-confirm"}, {"clean", "--dry-run"}} {
 				if c := te.run(args...); c != 1 {
 					t.Fatalf("%v: want 1, got %d", args, c)
 				}
@@ -419,10 +425,10 @@ func TestUnlinkStaleStateProblems(t *testing.T) {
 	}
 }
 
-func TestUnlinkStaleRemoveFailureKeepsRecord(t *testing.T) {
+func TestCleanRemoveFailureKeepsRecord(t *testing.T) {
 	te := staleSetup(t)
 	te.fsys.unlinkFail = map[string]error{p("home", ".b"): errors.New("busy")}
-	if c := te.run("unlink", "--stale", "--yes"); c != 1 {
+	if c := te.run("clean", "--no-confirm"); c != 1 {
 		t.Fatalf("want 1, got %d", c)
 	}
 	if !strings.Contains(te.out.String(), "! failed ~/.b") || !strings.Contains(te.out.String(), "busy") {
@@ -433,10 +439,10 @@ func TestUnlinkStaleRemoveFailureKeepsRecord(t *testing.T) {
 	}
 }
 
-func TestUnlinkStateWriteFailure(t *testing.T) {
+func TestCleanStateWriteFailure(t *testing.T) {
 	te := staleSetup(t)
 	te.fsys.replaceFail = errors.New("disk full")
-	if c := te.run("unlink", "--stale", "--yes"); c != 1 {
+	if c := te.run("clean", "--no-confirm"); c != 1 {
 		t.Fatalf("want 1, got %d", c)
 	}
 	if te.isLink(p("home", ".b")) {
@@ -447,16 +453,12 @@ func TestUnlinkStateWriteFailure(t *testing.T) {
 	}
 }
 
-func TestUnlinkUsage(t *testing.T) {
+func TestCleanUsage(t *testing.T) {
 	te := staleSetup(t)
-	if c := te.run("unlink"); c != 2 {
-		t.Errorf("no arguments: want 2, got %d", c)
-	}
-	if c := te.run("unlink", "~/.b", "--stale"); c != 2 {
-		t.Errorf("target with --stale: want 2, got %d", c)
-	}
-	if c := te.run("unlink", "~/.b"); c != 1 || !strings.Contains(te.errOut.String(), "not implemented") {
-		t.Errorf("target: %d %q", c, te.errOut)
+	for _, args := range [][]string{{"clean", "~/.b"}, {"clean", "--stale"}, {"unlink", "--stale"}} {
+		if c := te.run(args...); c != 2 {
+			t.Errorf("%v: want 2, got %d", args, c)
+		}
 	}
 	if !te.isLink(p("home", ".b")) {
 		t.Error("something was removed")

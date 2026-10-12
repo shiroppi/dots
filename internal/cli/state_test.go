@@ -105,10 +105,10 @@ func TestApplyDropsRecordsOfMissingTargets(t *testing.T) {
 	}
 }
 
-func TestDryRunAndDoctorDoNotTouchState(t *testing.T) {
+func TestDryRunAndStatusDoNotTouchState(t *testing.T) {
 	te := stateSetup(t)
 	te.run("apply", "--dry-run")
-	te.run("doctor")
+	te.run("status")
 	if ok, _ := dotsfs.Exists(te.fsys, te.app.StatePath); ok {
 		t.Fatal("state file was created")
 	}
@@ -122,7 +122,7 @@ func TestDryRunAndDoctorDoNotTouchState(t *testing.T) {
 	}
 	before := snap(te.fsys, p("state"))
 	te.run("apply", "--dry-run")
-	te.run("doctor")
+	te.run("status")
 	if before != snap(te.fsys, p("state")) {
 		t.Fatal("state directory changed")
 	}

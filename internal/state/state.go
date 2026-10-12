@@ -1,5 +1,5 @@
 // Package state evaluates the current file system state of resolved links
-// (spec §6). Evaluation is read-only: doctor, apply --dry-run, and apply all
+// (spec §6). Evaluation is read-only: status, apply --dry-run, and apply all
 // share it.
 package state
 
