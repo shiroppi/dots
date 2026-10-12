@@ -29,6 +29,7 @@ TOML
 export HOME="$FAKEHOME"
 export XDG_CONFIG_HOME="$FAKEHOME/.config"
 export XDG_DATA_HOME="$FAKEHOME/.local/share"
+export XDG_STATE_HOME="$FAKEHOME/.local/state"
 export TERM="${TTY_E2E_TERM:-xterm-256color}"
 export NO_COLOR=1
 case "$(uname -s)" in
@@ -134,6 +135,26 @@ if [ -L "$FAKEHOME/.vimrc" ] && [ -L "$FAKEHOME/.gvimrc" ]; then
   pass "both conflicts replaced"
 else
   fail "not both links were created"; dump
+fi
+
+# f. unlink --stale: drop the ~/.gvimrc rule (its link was recorded by the
+# apply in e). Ctrl-C at the prompt -> exit 130 and nothing is removed; Up
+# moves to "Yes - remove them" and Enter removes the link.
+cat > "$REPO/dots.toml" <<'TOML'
+[dots]
+"~/.vimrc" = "vimrc"
+TOML
+drive '{Remove 1 stale} {\003}' unlink --stale
+expect_rc "unlink --stale (Ctrl-C)" 130
+expect_out "unlink --stale (Ctrl-C)" "~/.gvimrc"
+if [ -L "$FAKEHOME/.gvimrc" ]; then pass "aborted unlink left the link"; else fail "aborted unlink removed the link"; dump; fi
+drive '{Remove 1 stale} {\033\[A} {} {\r}' unlink --stale
+expect_rc "unlink --stale (Yes)" 0
+expect_out "unlink --stale (Yes)" "? stale links  Yes – remove them"
+if [ ! -e "$FAKEHOME/.gvimrc" ] && [ ! -L "$FAKEHOME/.gvimrc" ] && [ -L "$FAKEHOME/.vimrc" ]; then
+  pass "stale link removed, current link kept"
+else
+  fail "unexpected state after unlink --stale"; dump
 fi
 
 if [ "$FAILED" -ne 0 ]; then echo "tty-e2e FAILED" >&2; exit 1; fi

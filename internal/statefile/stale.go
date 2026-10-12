@@ -72,32 +72,43 @@ func Classify(fsys fs.Manager, goos string, links []Link, repoRoot string, curre
 		if _, ok := cur[pathx.Key(goos, l.Target)]; ok {
 			continue
 		}
-		s := Stale{Record: l}
-		info, err := fsys.Lstat(l.Target)
-		switch {
-		case err == nil:
-			if info.Mode()&os.ModeSymlink == 0 {
-				s.Kind = StaleChanged
-				break
-			}
-			text, err := fsys.Readlink(l.Target)
-			if err != nil {
-				return nil, fmt.Errorf("cannot read link %s: %w", l.Target, err)
-			}
-			s.Current = text
-			if sameLinkText(goos, text, l.Link) {
-				s.Kind = StaleLink
-			} else {
-				s.Kind = StaleChanged
-			}
-		case isGone(err):
-			s.Kind = StaleGone
-		default:
-			return nil, fmt.Errorf("cannot inspect %s: %w", l.Target, err)
+		s, err := Inspect(fsys, goos, l)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// Inspect classifies l by the current state of its target, with Lstat and
+// Readlink only. It does not check whether l is stale; unlink uses it to
+// re-check a record right before acting.
+func Inspect(fsys fs.Manager, goos string, l Link) (Stale, error) {
+	s := Stale{Record: l}
+	info, err := fsys.Lstat(l.Target)
+	switch {
+	case err == nil:
+		if info.Mode()&os.ModeSymlink == 0 {
+			s.Kind = StaleChanged
+			break
+		}
+		text, err := fsys.Readlink(l.Target)
+		if err != nil {
+			return s, fmt.Errorf("cannot read link %s: %w", l.Target, err)
+		}
+		s.Current = text
+		if sameLinkText(goos, text, l.Link) {
+			s.Kind = StaleLink
+		} else {
+			s.Kind = StaleChanged
+		}
+	case isGone(err):
+		s.Kind = StaleGone
+	default:
+		return s, fmt.Errorf("cannot inspect %s: %w", l.Target, err)
+	}
+	return s, nil
 }
 
 func sameLinkText(goos, a, b string) bool {

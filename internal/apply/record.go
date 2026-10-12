@@ -5,9 +5,23 @@ import (
 	"time"
 
 	"github.com/shiroppi/dots/internal/fs"
-
+	"github.com/shiroppi/dots/internal/model"
 	"github.com/shiroppi/dots/internal/statefile"
 )
+
+// CurrentTargets returns the targets the current configuration declares: the
+// adopted entries and the overridden rules (spec §5.4). A link that only an
+// overridden rule declares is not stale.
+func CurrentTargets(res *model.Resolution) []string {
+	out := make([]string, 0, len(res.Entries)+len(res.Overrides))
+	for _, e := range res.Entries {
+		out = append(out, e.Target)
+	}
+	for _, o := range res.Overrides {
+		out = append(out, o.Loser.Target)
+	}
+	return out
+}
 
 // RecordedLinks returns the state records for the links rep created, replaced
 // or found already valid (spec §5.3). root is the repository root.

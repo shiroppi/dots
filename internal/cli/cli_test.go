@@ -51,6 +51,24 @@ type failFS struct {
 	dotsfs.Manager
 	symlinkFail map[string]error
 	removeFail  map[string]error
+	// unlinkFail makes Remove of the given paths fail; replaceFail makes
+	// every ReplaceFile (the state file save) fail.
+	unlinkFail  map[string]error
+	replaceFail error
+}
+
+func (f *failFS) Remove(name string) error {
+	if err, ok := f.unlinkFail[name]; ok {
+		return err
+	}
+	return f.Manager.Remove(name)
+}
+
+func (f *failFS) ReplaceFile(oldpath, newpath string) error {
+	if f.replaceFail != nil {
+		return f.replaceFail
+	}
+	return f.Manager.ReplaceFile(oldpath, newpath)
 }
 
 func (f *failFS) Symlink(oldname, newname string) error {
@@ -430,6 +448,9 @@ func TestApply(t *testing.T) {
 	if c := te.run("apply"); c != 0 {
 		t.Errorf("want 0 with no backup dir on no-conflict apply, got %d", c)
 	}
+	// The earlier rules are gone from dots.toml; a fresh state file keeps
+	// their links from showing up as stale.
+	te.app.StatePath = p("state2", "state.json")
 	if c := te.run("doctor"); c != 0 {
 		t.Errorf("want 0 for doctor with no backup dir, got %d", c)
 	}
@@ -707,6 +728,7 @@ Usage:
 Core:
   apply       Apply dotfiles
   doctor      Check configuration and managed files
+  unlink      Remove links that are no longer in dots.toml
 
 Usability:
   init        Initialize a dotfiles repository
