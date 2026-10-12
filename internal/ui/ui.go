@@ -1,4 +1,4 @@
-// Package ui renders doctor/plan/report output and asks interactive
+// Package ui renders status/plan/report output and asks interactive
 // confirmations (spec §6-§8). It contains no business logic.
 package ui
 
@@ -168,7 +168,7 @@ const (
 	detailIndent = "    "
 )
 
-// Status symbols (spec §8): the same set describes states (doctor) and
+// Status symbols (spec §8): the same set describes states (status) and
 // operations (dry-run, apply).
 const (
 	symOK      = "✓"
@@ -188,7 +188,7 @@ func (p *Printer) itemLine(t tone, sym, word string, e model.Entry, suffix strin
 	p.printf("%s%s %s%s\n", itemIndent, p.paint(t, mark), p.display(e.Target), suffix)
 }
 
-// mapping is the doctor-only " ← source  origin" tail of an item line.
+// mapping is the status --verbose-only " ← source  origin" tail of an item line.
 func (p *Printer) mapping(e model.Entry) string {
 	return " " + p.paint(toneDim, arrow+" "+p.displaySource(e.Source)) + "  " + p.paint(toneDim, e.Origin.String())
 }
@@ -210,10 +210,36 @@ func (p *Printer) overrides(ovs []model.Override) {
 		return
 	}
 	p.printf("\nOverridden rules:\n")
+	// One block per target (and kept rule), in order of first appearance;
+	// every ignored rule of the block follows the single "kept:" line.
+	type block struct {
+		target  string
+		kept    string
+		ignored []string
+	}
+	var blocks []*block
+	index := map[[2]string]*block{}
 	for _, o := range ovs {
-		p.printf("%s%s\n", itemIndent, p.display(o.Target))
-		p.detail(toneDim, "kept:    "+o.Winner.String())
-		p.detail(toneDim, "ignored: "+o.Loser.Origin.String()+" -> "+p.displaySource(o.Loser.Source))
+		k := [2]string{o.Target, o.Winner.String()}
+		b := index[k]
+		if b == nil {
+			b = &block{target: o.Target, kept: o.Winner.String()}
+			index[k] = b
+			blocks = append(blocks, b)
+		}
+		b.ignored = append(b.ignored, o.Loser.Origin.String()+" -> "+p.displaySource(o.Loser.Source))
+	}
+	const ignoredLabel = "ignored: "
+	for _, b := range blocks {
+		p.printf("%s%s\n", itemIndent, p.display(b.target))
+		p.detail(toneDim, "kept:    "+b.kept)
+		for i, ig := range b.ignored {
+			label := ignoredLabel
+			if i > 0 {
+				label = strings.Repeat(" ", len(ignoredLabel))
+			}
+			p.detail(toneDim, label+ig)
+		}
 	}
 }
 
@@ -236,9 +262,9 @@ func summary(parts ...count) string {
 
 const upToDate = "Everything is up to date."
 
-// doctorMark maps a doctor result to its symbol line parts. word is empty for
+// statusMark maps a status result to its symbol line parts. word is empty for
 // the states that need none.
-func doctorMark(r state.Result) (t tone, sym, word string) {
+func statusMark(r state.Result) (t tone, sym, word string) {
 	if r.Err != nil {
 		return toneYellow, symProblem, "error"
 	}
@@ -256,22 +282,25 @@ func doctorMark(r state.Result) (t tone, sym, word string) {
 	}
 }
 
-// Doctor prints the doctor report (spec §8). ok is false when any item is not
-// a valid link or has an error. doctor is the diagnostic view, so unlike
-// apply it keeps the mapping (← source) and the origin of every rule.
-func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
-	return p.DoctorState(plan, StateReport{})
+// Status prints the status report (spec §8). ok is false when any item is not
+// a valid link or has an error. Rows show the mark and the target; verbose
+// adds the mapping (← source) and the origin of every rule, and the list of
+// overridden rules.
+func (p *Printer) Status(plan *apply.Plan, verbose bool) (ok bool) {
+	return p.StatusState(plan, StateReport{}, verbose)
 }
 
-// DoctorState is Doctor plus the state file part (spec §12.1): stale links
+// StatusState is Status plus the state file part (spec §8.1): stale links
 // and a broken state file also make ok false.
-func (p *Printer) DoctorState(plan *apply.Plan, sr StateReport) (ok bool) {
+func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (ok bool) {
 	p.header()
 	ok = true
 	var nOK, nMissing, nWrong, nConflict, nErr int
+	l := p.newList()
+	l.grouped = true
 	for _, it := range plan.Items {
 		r := it.Result
-		t, sym, word := doctorMark(r)
+		t, sym, word := statusMark(r)
 		switch {
 		case sym == symOK:
 			nOK++
@@ -287,31 +316,36 @@ func (p *Printer) DoctorState(plan *apply.Plan, sr StateReport) (ok bool) {
 		if sym != symOK {
 			ok = false
 		}
-		p.itemLine(t, sym, word, r.Entry, p.mapping(r.Entry))
+		suffix := ""
+		if verbose {
+			suffix = p.mapping(r.Entry)
+		}
+		l.itemSuffix(t, sym, word, r.Entry, suffix)
 		if r.Err == nil && r.Status == state.InvalidLink {
-			p.detail(toneDim, "current link: "+oneLine(r.Current))
+			l.detail(toneDim, "current link: "+oneLine(r.Current))
 		}
 		if r.Err != nil {
-			p.errorDetails(r.Err)
+			l.errorDetails(r.Err)
 		}
 	}
-	sl := p.newList()
-	nStale := p.staleItems(sl, sr.Stale)
+	nStale := p.staleItems(l, sr.Stale, verbose)
 	if sr.Err != nil {
 		nErr++
-		sl.item(toneYellow, symProblem, "error", model.Entry{Target: sr.Path}, false)
-		sl.errorDetails(sr.Err)
+		l.item(toneYellow, symProblem, "error", model.Entry{Target: sr.Path}, false)
+		l.errorDetails(sr.Err)
 	}
-	sl.flush()
+	l.flush()
 	planOK := ok
 	ok = ok && nStale == 0 && sr.Err == nil
-	p.overrides(plan.Overrides)
+	if verbose {
+		p.overrides(plan.Overrides)
+	}
 	p.printf("\n")
 	if len(plan.Items) == 0 && nStale == 0 && sr.Err == nil {
 		p.printf("No links are defined.\n")
 	} else {
 		p.printf("%s\n", summary(count{nOK, "ok"}, count{nMissing, "missing"}, count{nWrong, "wrong link"},
-			count{nConflict, "conflict"}, count{nErr, "error"}, count{nStale, "stale"}, count{len(plan.Overrides), "overridden rule(s)"}))
+			count{nConflict, "conflict"}, count{nErr, "error"}, count{nStale, "stale"}))
 	}
 	switch {
 	case ok:

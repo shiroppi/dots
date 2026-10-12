@@ -73,9 +73,9 @@ func checkContains(t *testing.T, out string, subs ...string) {
 	}
 }
 
-func TestDoctor(t *testing.T) {
+func TestStatus(t *testing.T) {
 	var ok bool
-	out := render(func(pr *Printer) { ok = pr.Doctor(testPlan()) })
+	out := render(func(pr *Printer) { ok = pr.Status(testPlan(), true) })
 	if ok {
 		t.Error("ok = true, want false")
 	}
@@ -85,16 +85,39 @@ func TestDoctor(t *testing.T) {
 		"! wrong link "+p("home", "wrong"), "! conflict "+p("home", "conflict"), "! error "+p("home", "bad"),
 		"current link: ../elsewhere",
 		"    source does not exist", "    overlap",
-		"Overridden rules:", `kept:    dots."win"`, "ignored: auto[0] -> "+p("src", "lose"),
-		"1 ok, 1 missing, 1 wrong link, 1 conflict, 1 error, 1 overridden rule(s)",
+		"1 ok, 1 missing, 1 wrong link, 1 conflict, 1 error\n",
 		"Not OK",
+		"Overridden rules:", `kept:    dots."win"`, "ignored: auto[0] -> "+p("src", "lose"),
 	)
+	if i, j := strings.Index(out, "Overridden rules:"), strings.Index(out, "1 ok, 1 missing"); i < 0 || i > j {
+		t.Errorf("overridden rules must come before the summary:\n%s", out)
+	}
 }
 
-func TestDoctorOK(t *testing.T) {
+func TestStatusDefault(t *testing.T) {
+	var ok bool
+	out := render(func(pr *Printer) { ok = pr.Status(testPlan(), false) })
+	if ok {
+		t.Error("ok = true, want false")
+	}
+	checkContains(t, out,
+		"\u2713 "+p("home", "ok")+"\n",
+		"\u00d7 "+p("home", "missing")+"\n",
+		"! wrong link "+p("home", "wrong")+"\n", "current link: ../elsewhere",
+		"! conflict "+p("home", "conflict")+"\n", "! error "+p("home", "bad")+"\n",
+		"1 ok, 1 missing, 1 wrong link, 1 conflict, 1 error\n",
+	)
+	for _, bad := range []string{"\u2190", "dots.", "auto[0]", "Overridden"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("default status shows %q:\n%s", bad, out)
+		}
+	}
+}
+
+func TestStatusOK(t *testing.T) {
 	plan := &apply.Plan{Items: []apply.Item{item("ok", state.ValidLink, apply.ActionSkip, nil)}}
 	var ok bool
-	out := render(func(pr *Printer) { ok = pr.Doctor(plan) })
+	out := render(func(pr *Printer) { ok = pr.Status(plan, true) })
 	if !ok {
 		t.Error("ok = false, want true")
 	}
@@ -102,7 +125,7 @@ func TestDoctorOK(t *testing.T) {
 	if strings.Contains(out, "Overridden") {
 		t.Error("unexpected overrides section")
 	}
-	empty := render(func(pr *Printer) { ok = pr.Doctor(&apply.Plan{}) })
+	empty := render(func(pr *Printer) { ok = pr.Status(&apply.Plan{}, true) })
 	if !ok {
 		t.Error("empty plan should be ok")
 	}
@@ -249,7 +272,7 @@ func TestNoColorHasNoEscapes(t *testing.T) {
 	rep := &apply.Report{Items: []apply.ItemReport{{Item: plan.Items[0], Outcome: apply.Failed, Err: errors.New("x")}}}
 	rp := &backup.RestorePlan{Exists: true, ExistingKind: backup.KindFile}
 	out := render(func(pr *Printer) {
-		pr.Doctor(plan)
+		pr.Status(plan, true)
 		pr.Plan(plan)
 		pr.Report(rep)
 		pr.RestorePlan(rp, true)
@@ -259,7 +282,7 @@ func TestNoColorHasNoEscapes(t *testing.T) {
 		t.Errorf("plain output contains ANSI escapes: %q", out)
 	}
 	var b bytes.Buffer
-	(&Printer{W: &b, Color: true}).Doctor(plan)
+	(&Printer{W: &b, Color: true}).Status(plan, true)
 	if !strings.Contains(b.String(), "\x1b[") {
 		t.Error("color output has no escapes")
 	}
@@ -320,12 +343,12 @@ func TestReportWarning(t *testing.T) {
 }
 
 func TestRepoRelativeSources(t *testing.T) {
-	out := render(func(pr *Printer) { pr.Root = root(); pr.Doctor(testPlan()) })
+	out := render(func(pr *Printer) { pr.Root = root(); pr.Status(testPlan(), true) })
 	checkContains(t, out, "Repository: "+root()+"\n\n", " \u2190 src/ok  ")
 	if strings.Contains(out, p("src", "ok")) {
 		t.Errorf("absolute source still shown:\n%s", out)
 	}
-	if out2 := render(func(pr *Printer) { pr.Doctor(testPlan()) }); strings.Contains(out2, "Repository:") {
+	if out2 := render(func(pr *Printer) { pr.Status(testPlan(), true) }); strings.Contains(out2, "Repository:") {
 		t.Errorf("header printed without Root:\n%s", out2)
 	}
 }
@@ -347,7 +370,7 @@ func TestHeaders(t *testing.T) {
 
 	var b1 bytes.Buffer
 	pr1 := &Printer{W: &b1, Home: home}
-	pr1.Doctor(plan)
+	pr1.Status(plan, true)
 	pr1.Plan(plan)
 	pr1.Report(rep)
 	if strings.Contains(b1.String(), "Repository:") {
@@ -356,9 +379,9 @@ func TestHeaders(t *testing.T) {
 
 	var b2 bytes.Buffer
 	pr2 := &Printer{W: &b2, Home: home, Root: rootPath}
-	pr2.Doctor(plan)
+	pr2.Status(plan, true)
 	if !strings.Contains(b2.String(), "Repository: ~"+string(filepath.Separator)+"repo\n\n") {
-		t.Errorf("Doctor header missing or incorrect")
+		t.Errorf("Status header missing or incorrect")
 	}
 	b2.Reset()
 	pr2.Plan(plan)
@@ -375,7 +398,7 @@ func TestHeaders(t *testing.T) {
 func TestHeaderColorNoEscapes(t *testing.T) {
 	var b bytes.Buffer
 	pr := &Printer{W: &b, Root: p("repo"), Color: true}
-	pr.Doctor(&apply.Plan{})
+	pr.Status(&apply.Plan{}, true)
 	// Only the header line is checked: the summary line is colored.
 	first := strings.SplitN(b.String(), "\n", 2)[0]
 	if !strings.HasPrefix(first, "Repository: ") || strings.Contains(first, "\x1b[") {
@@ -443,5 +466,32 @@ func TestRelUnderTable(t *testing.T) {
 				t.Errorf("got %q, %v want %q, %v", got, ok, tc.want, tc.wantOk)
 			}
 		})
+	}
+}
+
+func TestOverridesGroupedByTarget(t *testing.T) {
+	win := model.Origin{Layer: model.LayerDots, Rule: `dots."t1"`}
+	lose := func(src, rule string) model.Entry {
+		return model.Entry{Source: p("src", src), Origin: model.Origin{Layer: model.LayerAuto, Rule: rule}}
+	}
+	plan := &apply.Plan{Overrides: []model.Override{
+		{Target: p("home", "t1"), Winner: win, Loser: lose("a", "auto[0]")},
+		{Target: p("home", "t2"), Winner: model.Origin{Layer: model.LayerDots, Rule: `dots."t2"`}, Loser: lose("c", "auto[2]")},
+		{Target: p("home", "t1"), Winner: win, Loser: lose("b", "auto[1]")},
+	}}
+	out := render(func(pr *Printer) { pr.Status(plan, true) })
+	want := "Overridden rules:\n" +
+		"  " + p("home", "t1") + "\n" +
+		"    kept:    " + `dots."t1"` + "\n" +
+		"    ignored: auto[0] -> " + p("src", "a") + "\n" +
+		"             auto[1] -> " + p("src", "b") + "\n" +
+		"  " + p("home", "t2") + "\n" +
+		"    kept:    " + `dots."t2"` + "\n" +
+		"    ignored: auto[2] -> " + p("src", "c") + "\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("overrides not grouped:\n%s", out)
+	}
+	if strings.Count(out, p("home", "t1")) != 1 {
+		t.Errorf("target repeated:\n%s", out)
 	}
 }

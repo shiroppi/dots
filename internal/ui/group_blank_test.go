@@ -44,3 +44,23 @@ func TestGroupedBlankLineAfterOK(t *testing.T) {
 		t.Errorf("details must stay attached and groups contiguous:\n%q", got)
 	}
 }
+
+func TestStatusGroupsRowsLikeApply(t *testing.T) {
+	h := func(n string) string { return p("home", n) }
+	plan := &apply.Plan{Items: []apply.Item{
+		item("conf", state.FileOrDir, apply.ActionReplace, nil),
+		item("miss1", state.NotExist, apply.ActionCreate, nil),
+		item("wrong", state.InvalidLink, apply.ActionReplace, func(r *state.Result) { r.Current = "elsewhere" }),
+		item("ok1", state.ValidLink, apply.ActionSkip, nil),
+		item("miss2", state.NotExist, apply.ActionCreate, nil),
+		item("ok2", state.ValidLink, apply.ActionSkip, nil),
+	}}
+	out := render(func(pr *Printer) { pr.Status(plan, false) })
+	want := "  ✓ " + h("ok1") + "\n  ✓ " + h("ok2") + "\n\n" +
+		"  × " + h("miss1") + "\n  × " + h("miss2") + "\n" +
+		"  ! conflict " + h("conf") + "\n" +
+		"  ! wrong link " + h("wrong") + "\n    current link: elsewhere\n\n"
+	if !strings.Contains(out, want) {
+		t.Errorf("status rows not grouped like apply:\n%s\nwant to contain\n%s", out, want)
+	}
+}

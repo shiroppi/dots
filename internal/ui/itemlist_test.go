@@ -146,10 +146,10 @@ func TestArrowNoColor(t *testing.T) {
 	}
 }
 
-func TestDoctorArrowOnEveryItem(t *testing.T) {
-	out := render(func(pr *Printer) { pr.Doctor(testPlan()) })
+func TestStatusArrowOnEveryItem(t *testing.T) {
+	out := render(func(pr *Printer) { pr.Status(testPlan(), true) })
 	if n := len(arrowLines(out)); n != 5 {
-		t.Errorf("doctor arrow lines = %d, want 5:\n%s", n, out)
+		t.Errorf("status arrow lines = %d, want 5:\n%s", n, out)
 	}
 	if strings.Contains(out, " -> "+p("src", "ok")) {
 		t.Errorf("old arrow still shown:\n%s", out)

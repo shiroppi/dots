@@ -64,7 +64,7 @@ func TestOutputPlanUpToDate(t *testing.T) {
 	}
 }
 
-func TestOutputDoctorVsPlan(t *testing.T) {
+func TestOutputStatusVsPlan(t *testing.T) {
 	var bufDoc, bufPlan bytes.Buffer
 	prDoc := &Printer{W: &bufDoc, Color: false, Root: fp("root")}
 	prPlan := &Printer{W: &bufPlan, Color: false, Root: fp("root")}
@@ -74,11 +74,11 @@ func TestOutputDoctorVsPlan(t *testing.T) {
 			{Action: apply.ActionCreate, Result: state.Result{Entry: model.Entry{Target: fp("t"), Source: fp("root", "src"), Origin: model.Origin{Rule: "rule"}}}},
 		},
 	}
-	prDoc.Doctor(plan)
+	prDoc.Status(plan, true)
 	prPlan.Plan(plan)
 
 	if !strings.Contains(bufDoc.String(), " \u2190 src  rule") {
-		t.Errorf("doctor missing mapping and origin\ngot:\n%s", bufDoc.String())
+		t.Errorf("status missing mapping and origin\ngot:\n%s", bufDoc.String())
 	}
 	if strings.Contains(bufPlan.String(), "rule") {
 		t.Errorf("plan should not have origin\ngot:\n%s", bufPlan.String())
@@ -114,9 +114,9 @@ func TestOutputColor(t *testing.T) {
 	}
 
 	buf.Reset()
-	pr.Doctor(&apply.Plan{Items: []apply.Item{{Result: state.Result{Entry: model.Entry{Target: "miss"}, Status: state.NotExist}}}})
+	pr.Status(&apply.Plan{Items: []apply.Item{{Result: state.Result{Entry: model.Entry{Target: "miss"}, Status: state.NotExist}}}}, true)
 	if !strings.Contains(buf.String(), "\x1b[31m×\x1b[0m") {
-		t.Errorf("missing red cross in doctor: %q", buf.String())
+		t.Errorf("missing red cross in status: %q", buf.String())
 	}
 }
 

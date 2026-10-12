@@ -19,8 +19,9 @@ type itemList struct {
 	p     *Printer
 	lines []listLine
 	// grouped makes flush order the item blocks (an item and its detail
-	// lines) by outcome: ok, created, replaced, then everything else. The
-	// order inside a group is kept.
+	// lines) by outcome: ok, created (missing in status), replaced, then
+	// everything else. The order inside a group is kept. It is shared by the
+	// plan, the apply report and status.
 	grouped bool
 }
 
@@ -39,23 +40,36 @@ func (p *Printer) newList() *itemList { return &itemList{p: p} }
 // item adds "  <symbol> [word ]<target>", followed by "← source" when
 // withSource is set.
 func (l *itemList) item(t tone, sym, word string, e model.Entry, withSource bool) {
-	mark := sym
-	if word != "" {
-		mark += " " + word
-	}
-	target := l.p.display(e.Target)
-	ln := listLine{
-		head:   itemIndent + l.p.paint(t, mark) + " " + target,
-		headW:  textWidth(itemIndent + mark + " " + target),
-		rank:   symbolRank(sym),
-		isItem: true,
-	}
+	ln := l.head(t, sym, word, e)
 	if withSource {
 		ln.hasSrc = true
 		ln.src = l.p.displaySource(e.Source)
 		ln.srcW = textWidth(ln.src)
 	}
 	l.lines = append(l.lines, ln)
+}
+
+// itemSuffix adds "  <symbol> [word ]<target><suffix>". The suffix is already
+// painted and not aligned, like the mapping of status --verbose.
+func (l *itemList) itemSuffix(t tone, sym, word string, e model.Entry, suffix string) {
+	ln := l.head(t, sym, word, e)
+	ln.head += suffix
+	l.lines = append(l.lines, ln)
+}
+
+// head builds the first line of an item up to the target.
+func (l *itemList) head(t tone, sym, word string, e model.Entry) listLine {
+	mark := sym
+	if word != "" {
+		mark += " " + word
+	}
+	target := l.p.display(e.Target)
+	return listLine{
+		head:   itemIndent + l.p.paint(t, mark) + " " + target,
+		headW:  textWidth(itemIndent + mark + " " + target),
+		rank:   symbolRank(sym),
+		isItem: true,
+	}
 }
 
 // detail adds one line indented under its item.
@@ -103,7 +117,7 @@ func symbolRank(sym string) int {
 	switch sym {
 	case symOK:
 		return 0
-	case symCreate:
+	case symCreate, symMissing:
 		return 1
 	case symReplace:
 		return 2
