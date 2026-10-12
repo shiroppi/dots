@@ -43,6 +43,8 @@ type App struct {
 	// ConfirmRestore is used only when Interactive; true means back up the
 	// current content and restore.
 	ConfirmRestore func(*backup.RestorePlan) (bool, error)
+	// Ask shows a confirmation; used only when Interactive.
+	Ask func(ui.Question) (ui.Answer, error)
 	// BackupDir overrides backup.DefaultDir(Env) when non-empty.
 	BackupDir string
 	// RunEditor runs the editor attached to the terminal.
@@ -264,7 +266,7 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usageError{err} })
 	root.AddGroup(&cobra.Group{ID: "core", Title: "Core:"}, &cobra.Group{ID: "usability", Title: "Usability:"})
-	root.AddCommand(newApplyCmd(app), newDoctorCmd(app), newInitCmd(app), newRestoreCmd(app), newEditCmd(app))
+	root.AddCommand(newApplyCmd(app), newDoctorCmd(app), newUnlinkCmd(app), newInitCmd(app), newRestoreCmd(app), newEditCmd(app))
 	for _, c := range root.Commands() {
 		c.Flags().BoolP("help", "h", false, "Show help")
 		if inner := c.Args; inner != nil {
@@ -352,7 +354,8 @@ func newDoctorCmd(app *App) *cobra.Command {
 				return err
 			}
 			plan := apply.BuildPlan(app.FS, res)
-			if !app.printerFor(res).Doctor(plan) {
+			sr, stateOK := app.staleReport(res)
+			if !app.printerFor(res).DoctorState(plan, sr) || !stateOK {
 				return silentError{}
 			}
 			return nil
@@ -420,6 +423,9 @@ func newApplyCmd(app *App) *cobra.Command {
 				stateErr = fmt.Errorf("warning: state was not updated: %w", storeErr)
 			} else {
 				stateErr = app.updateState(pr, store, st, loadErr, rep, res.Root)
+				if loadErr == nil || errors.Is(loadErr, statefile.ErrBroken) {
+					stateErr = errors.Join(stateErr, app.staleNotice(pr, st, res))
+				}
 			}
 			return pr.WrapError(errors.Join(err, stateErr))
 		},
@@ -530,6 +536,7 @@ func Main(version string) int {
 		Interactive: interactive,
 		Color:       interactive && !noColor,
 		Prompter:    &ui.Prompter{In: os.Stdin, Out: os.Stdout, Home: env.Home},
+		Ask:         func(q ui.Question) (ui.Answer, error) { return ui.Ask(os.Stdin, os.Stdout, q) },
 		ConfirmRestore: func(plan *backup.RestorePlan) (bool, error) {
 			return ui.ConfirmRestore(os.Stdin, os.Stdout, env.Home, plan)
 		},

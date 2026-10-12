@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"sort"
+	"syscall"
 	"time"
 )
 
@@ -81,6 +82,15 @@ func (osManager) Create(name string) (File, error) {
 func (osManager) Rename(oldpath, newpath string) error {
 	if _, err := os.Lstat(newpath); err == nil {
 		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: os.ErrExist}
+	}
+	return os.Rename(oldpath, newpath)
+}
+
+// ReplaceFile relies on os.Rename, which replaces an existing file on Unix
+// and (via MoveFileEx) on Windows.
+func (osManager) ReplaceFile(oldpath, newpath string) error {
+	if info, err := os.Lstat(newpath); err == nil && info.IsDir() {
+		return &os.LinkError{Op: "rename", Old: oldpath, New: newpath, Err: syscall.EISDIR}
 	}
 	return os.Rename(oldpath, newpath)
 }

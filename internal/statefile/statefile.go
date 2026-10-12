@@ -7,8 +7,9 @@
 //	{"version": 1, "links": [{"target": ..., "link": ..., "repository": ...,
 //	 "source": ..., "recorded_at": ...}]}
 //
-// Unknown keys are ignored on load so later versions can add keys (for
-// example "copies") without bumping the version.
+// Unknown top-level keys are kept on load and written back by Save, so a
+// later version can add keys (for example "copies") without bumping the
+// version and this version does not drop them.
 //
 // Permissions: the directory is created with mode 0700 and the file with
 // mode 0600. On Windows these bits are only best-effort; the default location
@@ -79,11 +80,8 @@ type Link struct {
 type State struct {
 	GOOS  string
 	Links []Link
-}
-
-type fileDoc struct {
-	Version int    `json:"version"`
-	Links   []Link `json:"links"`
+	// extra holds the unknown top-level keys of the loaded file verbatim.
+	extra map[string]json.RawMessage
 }
 
 func (s *State) index(target string) int {
@@ -178,64 +176,76 @@ func (s *Store) Load() (*State, error) {
 		}
 		return st, fmt.Errorf("cannot read state file %s: %w", s.Path, err)
 	}
-	links, err := parse(data)
+	links, extra, err := parse(data)
 	if err != nil {
 		return st, fmt.Errorf("%s: %w", s.Path, err)
 	}
 	st.Links = links
+	st.extra = extra
 	st.sort()
 	return st, nil
 }
 
-// parse validates data and returns its link records.
-func parse(data []byte) ([]Link, error) {
+// parse validates data and returns its link records and its unknown
+// top-level keys.
+func parse(data []byte) ([]Link, map[string]json.RawMessage, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(data, &top); err != nil || top == nil {
 		if err == nil {
 			err = errors.New("not a JSON object")
 		}
-		return nil, fmt.Errorf("%w: %v", ErrBroken, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrBroken, err)
 	}
 	rawVer, ok := top["version"]
 	if !ok {
-		return nil, fmt.Errorf("%w: missing \"version\"", ErrBroken)
+		return nil, nil, fmt.Errorf("%w: missing \"version\"", ErrBroken)
 	}
 	var ver int
 	if err := json.Unmarshal(rawVer, &ver); err != nil || ver < 1 {
-		return nil, fmt.Errorf("%w: invalid \"version\"", ErrBroken)
+		return nil, nil, fmt.Errorf("%w: invalid \"version\"", ErrBroken)
 	}
 	if ver > Version {
-		return nil, fmt.Errorf("%w (version %d, this dots understands up to %d)", ErrNewerVersion, ver, Version)
+		return nil, nil, fmt.Errorf("%w (version %d, this dots understands up to %d)", ErrNewerVersion, ver, Version)
 	}
 	rawLinks, ok := top["links"]
 	if !ok {
-		return nil, fmt.Errorf("%w: missing \"links\"", ErrBroken)
+		return nil, nil, fmt.Errorf("%w: missing \"links\"", ErrBroken)
 	}
 	var recs []map[string]json.RawMessage
 	if err := json.Unmarshal(rawLinks, &recs); err != nil || recs == nil {
-		return nil, fmt.Errorf("%w: \"links\" is not an array", ErrBroken)
+		return nil, nil, fmt.Errorf("%w: \"links\" is not an array", ErrBroken)
 	}
 	links := make([]Link, 0, len(recs))
 	for i, rec := range recs {
 		for _, key := range []string{"target", "link", "repository", "source", "recorded_at"} {
 			if _, ok := rec[key]; !ok {
-				return nil, fmt.Errorf("%w: links[%d] lacks %q", ErrBroken, i, key)
+				return nil, nil, fmt.Errorf("%w: links[%d] lacks %q", ErrBroken, i, key)
 			}
 		}
 		raw, err := json.Marshal(rec)
 		if err != nil {
-			return nil, fmt.Errorf("%w: links[%d]: %v", ErrBroken, i, err)
+			return nil, nil, fmt.Errorf("%w: links[%d]: %v", ErrBroken, i, err)
 		}
 		var l Link
 		if err := json.Unmarshal(raw, &l); err != nil {
-			return nil, fmt.Errorf("%w: links[%d]: %v", ErrBroken, i, err)
+			return nil, nil, fmt.Errorf("%w: links[%d]: %v", ErrBroken, i, err)
 		}
 		if l.Target == "" || l.Link == "" || l.Repository == "" {
-			return nil, fmt.Errorf("%w: links[%d] has an empty value", ErrBroken, i)
+			return nil, nil, fmt.Errorf("%w: links[%d] has an empty value", ErrBroken, i)
 		}
 		links = append(links, l)
 	}
-	return links, nil
+	var extra map[string]json.RawMessage
+	for k, v := range top {
+		if k == "version" || k == "links" {
+			continue
+		}
+		if extra == nil {
+			extra = map[string]json.RawMessage{}
+		}
+		extra[k] = v
+	}
+	return links, extra, nil
 }
 
 // Save writes st: links sorted by target, one record per target. The data
@@ -248,15 +258,11 @@ func (s *Store) Save(st *State) error {
 		out.Record(l)
 	}
 	out.sort()
-	doc := fileDoc{Version: Version, Links: out.Links}
-	if doc.Links == nil {
-		doc.Links = []Link{}
+	if out.Links == nil {
+		out.Links = []Link{}
 	}
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(doc); err != nil {
+	data, err := encode(out.Links, st.extra)
+	if err != nil {
 		return fmt.Errorf("cannot encode state file: %w", err)
 	}
 
@@ -272,7 +278,7 @@ func (s *Store) Save(st *State) error {
 	if err != nil {
 		return fmt.Errorf("create temporary state file: %w", err)
 	}
-	_, werr := f.Write(buf.Bytes())
+	_, werr := f.Write(data)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}
@@ -282,21 +288,54 @@ func (s *Store) Save(st *State) error {
 	}
 	_ = s.FS.Chmod(tmp, 0o600) // best effort on platforms without mode bits
 
-	// fs.Manager.Rename refuses an existing destination, so the previous
-	// file is removed first.
-	err = s.FS.Rename(tmp, s.Path)
-	if errors.Is(err, fs.ErrExist) {
-		if rerr := s.FS.Remove(s.Path); rerr != nil && !isGone(rerr) {
-			_ = s.FS.RemoveAll(tmp)
-			return fmt.Errorf("replace state file: %w", rerr)
-		}
-		err = s.FS.Rename(tmp, s.Path)
-	}
-	if err != nil {
+	if err := s.FS.ReplaceFile(tmp, s.Path); err != nil {
 		_ = s.FS.RemoveAll(tmp)
 		return fmt.Errorf("replace state file: %w", err)
 	}
 	return nil
+}
+
+// encode renders the document: version, links, then the preserved unknown
+// keys in sorted order.
+func encode(links []Link, extra map[string]json.RawMessage) ([]byte, error) {
+	val := func(v any) (json.RawMessage, error) {
+		var b bytes.Buffer
+		enc := json.NewEncoder(&b)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(v); err != nil {
+			return nil, err
+		}
+		return bytes.TrimRight(b.Bytes(), "\n"), nil
+	}
+	ver, err := val(Version)
+	if err != nil {
+		return nil, err
+	}
+	lk, err := val(links)
+	if err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(extra))
+	for k := range extra {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var raw bytes.Buffer
+	raw.WriteString(`{"version":` + string(ver) + `,"links":` + string(lk))
+	for _, k := range keys {
+		kb, err := val(k)
+		if err != nil {
+			return nil, err
+		}
+		raw.WriteString(`,` + string(kb) + `:` + string(extra[k]))
+	}
+	raw.WriteByte('}')
+	var out bytes.Buffer
+	if err := json.Indent(&out, raw.Bytes(), "", "  "); err != nil {
+		return nil, err
+	}
+	out.WriteByte('\n')
+	return out.Bytes(), nil
 }
 
 // MoveAside renames the state file to <path>.broken-<UTC yyyymmddTHHMMSSZ>

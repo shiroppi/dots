@@ -260,6 +260,12 @@ func doctorMark(r state.Result) (t tone, sym, word string) {
 // a valid link or has an error. doctor is the diagnostic view, so unlike
 // apply it keeps the mapping (← source) and the origin of every rule.
 func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
+	return p.DoctorState(plan, StateReport{})
+}
+
+// DoctorState is Doctor plus the state file part (spec §12.1): stale links
+// and a broken state file also make ok false.
+func (p *Printer) DoctorState(plan *apply.Plan, sr StateReport) (ok bool) {
 	p.header()
 	ok = true
 	var nOK, nMissing, nWrong, nConflict, nErr int
@@ -289,18 +295,35 @@ func (p *Printer) Doctor(plan *apply.Plan) (ok bool) {
 			p.errorDetails(r.Err)
 		}
 	}
+	sl := p.newList()
+	nStale := p.staleItems(sl, sr.Stale)
+	if sr.Err != nil {
+		nErr++
+		sl.item(toneYellow, symProblem, "error", model.Entry{Target: sr.Path}, false)
+		sl.errorDetails(sr.Err)
+	}
+	sl.flush()
+	planOK := ok
+	ok = ok && nStale == 0 && sr.Err == nil
 	p.overrides(plan.Overrides)
 	p.printf("\n")
-	if len(plan.Items) == 0 {
+	if len(plan.Items) == 0 && nStale == 0 && sr.Err == nil {
 		p.printf("No links are defined.\n")
 	} else {
 		p.printf("%s\n", summary(count{nOK, "ok"}, count{nMissing, "missing"}, count{nWrong, "wrong link"},
-			count{nConflict, "conflict"}, count{nErr, "error"}, count{len(plan.Overrides), "overridden rule(s)"}))
+			count{nConflict, "conflict"}, count{nErr, "error"}, count{nStale, "stale"}, count{len(plan.Overrides), "overridden rule(s)"}))
 	}
-	if ok {
+	switch {
+	case ok:
 		p.printf("%s\n", p.paint(toneGreen, "Everything is in order."))
-	} else {
+	case planOK:
+		p.printf("%s\n", p.paint(toneRed, "Not OK: see the problems above."))
+	default:
 		p.printf("%s\n", p.paint(toneRed, "Not OK: run `dots apply` to fix."))
+	}
+	if nStale > 0 {
+		p.printf("\n")
+		p.StaleHint("stale links")
 	}
 	return ok
 }

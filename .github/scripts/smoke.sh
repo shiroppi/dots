@@ -27,6 +27,7 @@ export HOME="$FAKEHOME"
 export USERPROFILE="$FAKEHOME"
 export LOCALAPPDATA="$FAKEHOME/AppData/Local"
 export XDG_CONFIG_HOME="$FAKEHOME/.config"
+export XDG_STATE_HOME="$FAKEHOME/.local/state"
 cd "$REPO"
 
 run() { # run <expected-exit> args...
@@ -66,4 +67,25 @@ run 0 apply
 run 0 doctor
 check_link "$FAKEHOME/.vimrc"
 check_link "$FAKEHOME/.config/sub"
+
+# Stale links: remove a rule from dots.toml. doctor reports its link and
+# exits 1, unlink --stale removes it, and doctor is clean again.
+cat > "$REPO/dots.toml" <<'TOML'
+[[auto]]
+source = "config"
+target = "~/.config"
+TOML
+check_link "$FAKEHOME/.vimrc"
+run 1 doctor
+"$BIN" doctor > "$WORK/doctor.txt" || true
+grep -q "stale" "$WORK/doctor.txt" || { echo "FAIL: doctor does not report the stale link" >&2; cat "$WORK/doctor.txt" >&2; exit 1; }
+run 0 unlink --stale --dry-run
+[ -L "$FAKEHOME/.vimrc" ] || { echo "FAIL: --dry-run removed the link" >&2; exit 1; }
+run 0 unlink --stale --yes
+[ ! -e "$FAKEHOME/.vimrc" ] && [ ! -L "$FAKEHOME/.vimrc" ] || { echo "FAIL: stale link was not removed" >&2; exit 1; }
+[ -f "$REPO/vimrc" ] || { echo "FAIL: source file was removed" >&2; exit 1; }
+check_link "$FAKEHOME/.config/sub"
+run 0 doctor
+"$BIN" doctor > "$WORK/doctor.txt"
+if grep -q "stale" "$WORK/doctor.txt"; then echo "FAIL: doctor still reports stale links" >&2; cat "$WORK/doctor.txt" >&2; exit 1; fi
 echo "smoke OK"
