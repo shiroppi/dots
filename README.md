@@ -109,25 +109,25 @@ go install github.com/shiroppi/dots/cmd/dots@latest
      ✓ ~/.config/starship.toml
    ```
 
-### Stale links
-
-`dots apply` records the links it creates in a state file (`$XDG_STATE_HOME/dots/state.json`, `~/.local/state/dots/state.json` by default; `~/Library/Application Support/dots/state.json` on macOS; `%LOCALAPPDATA%\dots\state.json` on Windows). When you remove a rule from `dots.toml`, its link stays in place and becomes *stale*. `dots doctor` lists stale links (and exits with 1), and `dots apply` mentions how many there are, but neither removes them:
-
-```
-  ! stale ~/.config/tmux  ← config/tmux
-    not in dots.toml; created by dots on 2026-10-01
-  ! stale ~/.zshrc
-    changed since dots created it; dots will not remove it
-
-Run "dots unlink --stale" to remove stale links.
-```
-
-`dots unlink --stale` lists them and asks before removing (`--yes` skips the question, `--dry-run` only shows what would happen). It removes only symbolic links whose link text is still the one dots recorded; a stale path that has since become a regular file, a directory or a different link is left alone and just forgotten, and parent directories are never removed.
-
-Limitations:
-
-* Links created by dots v0.1 and removed from `dots.toml` before any v0.2 `dots apply` are not detected, because nothing recorded them.
-* Moving the repository to another path loses the detection of records made before the move.
+<!-- ### Stale links -->
+<!---->
+<!-- `dots apply` records the links it creates in a state file (`$XDG_STATE_HOME/dots/state.json`, `~/.local/state/dots/state.json` by default; `~/Library/Application Support/dots/state.json` on macOS; `%LOCALAPPDATA%\dots\state.json` on Windows). When you remove a rule from `dots.toml`, its link stays in place and becomes *stale*. `dots doctor` lists stale links (and exits with 1), and `dots apply` mentions how many there are, but neither removes them: -->
+<!---->
+<!-- ``` -->
+<!--   ! stale ~/.config/tmux  ← config/tmux -->
+<!--     not in dots.toml; created by dots on 2026-10-01 -->
+<!--   ! stale ~/.zshrc -->
+<!--     changed since dots created it; dots will not remove it -->
+<!---->
+<!-- Run "dots unlink --stale" to remove stale links. -->
+<!-- ``` -->
+<!---->
+<!-- `dots unlink --stale` lists them and asks before removing (`--yes` skips the question, `--dry-run` only shows what would happen). It removes only symbolic links whose link text is still the one dots recorded; a stale path that has since become a regular file, a directory or a different link is left alone and just forgotten, and parent directories are never removed. -->
+<!---->
+<!-- Limitations: -->
+<!---->
+<!-- * Links created by dots v0.1 and removed from `dots.toml` before any v0.2 `dots apply` are not detected, because nothing recorded them. -->
+<!-- * Moving the repository to another path loses the detection of records made before the move. -->
 
 > [!IMPORTANT]
 > On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the `SeCreateSymbolicLinkPrivilege` (usually Administrator).
