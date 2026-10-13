@@ -7,7 +7,7 @@
 - 実装言語: Go 1.26 以上（v0.1.0 の 1.24 から上げる。8.4）
 - 設定ファイル: dots.toml
 - 元になった草案: GitHub Issue #1「v1.0までの実装草案」の「v0.2.0 — 初回セットアップと普段使い」
-- 関連Issue: #6（設定から消したルールのリンクが残る）、#9（apply で変更したファイルの source を表示する）、#11（競合の確認でチェックボックスへ移れない）、#4（先行入力で確認プロンプトが止まる）
+- 関連Issue: #6（設定から消したルールのリンクが残る）、#9（apply で変更したファイルの source を表示する）、#11（競合の確認でチェックボックスへ移れない）、#4（先行入力で確認プロンプトが止まる）、#10（apply で変化のなかった項目を折りたたむ）
 
 ## 1. 目的と範囲
 
@@ -31,6 +31,7 @@ v0.1.0 で、dots.toml に書いたルールどおりにリンクを作り、診
 | #9: apply で変更したファイルの source を表示する | 含める | 8.3 |
 | #11: 競合の確認でチェックボックスへ移れない | 含める。huh をやめ、bubbletea v2 で確認プロンプトを書いて直す | 8.4 |
 | #4: 先行入力で確認プロンプトが止まる | 確認プロンプトを bubbletea v2 で書くことで一緒に解決する | 8.4 |
+| #10: unchanged なファイルを折りたためる設定がほしい | 含める。dots.toml に `[general]` を加え、既定で折りたたむ | 8.5 |
 
 ### 1.2 v0.2.0 の非目標
 
@@ -47,7 +48,7 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 - 複数のdotfilesリポジトリを同時に使い分けること（5.4、11章）。
 - プラグイン機構。
 - Issue #12（親ディレクトリの扱い）。現状では `internal/apply/execute.go` の `place` が、配置先の親ディレクトリを確認なしで `MkdirAll(0o755)` で作る。v0.2.0 ではこの動作を変えない。
-- Issue #13（copy モード）と #10（変化のなかった項目の折りたたみ）。どちらも保留中で、v0.2.0 の仕様には含めない（5.2、11章）。
+- Issue #13（copy モード）。保留中で、v0.2.0 の仕様には含めない（5.2、11章）。
 
 ## 2. v0.1.0 からの変更点
 
@@ -63,17 +64,22 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 | Go の最小バージョン | 1.24 から 1.26 に上げる（8.4） | `go install` で入れる場合は Go 1.26 以上が必要になる。配布バイナリには影響しない |
 | 確認プロンプト | huh をやめ、bubbletea で書いた確認プロンプトにする（8.4） | 選択肢と答えの意味は v0.1.0 と同じ。操作方法が変わる |
 | edit の削除 | `dots edit` を削除する（1.2） | `dots edit` は使えなくなる（別名も残さない）。`$EDITOR dots.toml` などで直接開く |
+| dots.toml の `[general]` | 新しいトップレベルのテーブル `[general]` を加える。v0.2.0 では `fold_unchanged` と `fold_unchanged_keep` を置く（8.5） | `[general]` を書いた dots.toml は、v0.1.0 の dots では未知のトップレベルキーとしてエラーになる |
+| apply の折りたたみ | 変化のなかった項目（`✓`）が多いと、先頭の数件だけ表示して残りを `… N unchanged` の1行にまとめる。既定で有効。`dots apply --verbose` で全件を表示する（8.5） | 表示の変更 |
+| apply の要約の語 | `already ok` を `unchanged` に変える（apply、apply --dry-run。8.5） | 表示の変更。出力を解析しているスクリプトには影響する |
+| 項目のまとまりの間の空行 | apply と status で、`✓` の行と他の行の間に入れていた空行をなくす（8.1、8.2） | 表示の変更 |
 | 新コマンド | clean（7章） | - |
 
 ## 3. CLIコマンド
 
-v0.1.0 のコマンドに次を追加する。v0.1.0 の `dots edit` は削除する（1.2）。
+v0.1.0 のコマンドに次のコマンドとオプションを追加する。v0.1.0 の `dots edit` は削除する（1.2）。
 
 | コマンド | 動作 |
 | --- | --- |
 | dots clean | 設定にはないが dots が作ったリンク（stale）を外す。実行前に確認する。 |
 | dots clean --no-confirm | 確認せずに外す。 |
 | dots clean --dry-run | 外すものと触らないものを表示する。 |
+| dots apply --verbose | 変化のなかった項目を折りたたまずに全件表示する（8.5）。 |
 
 すべてのコマンドに共通のオプションとして `--repo <dir>` を加える。リポジトリルートを指定する（4.1）。短い形は設けない。init では使えない。
 
@@ -330,9 +336,9 @@ $ dots status
 Repository: ~/dotfiles
 
   ✓ ~/.vimrc
+  × ~/.config/tmux
   ! wrong link ~/.config/nvim
     current link: ../../dotfiles/config/nvim
-  × ~/.config/tmux
 
 1 ok, 1 missing, 1 wrong link
 Not OK: run `dots apply` to fix.
@@ -345,9 +351,9 @@ $ dots status --verbose
 Repository: ~/dotfiles
 
   ✓ ~/.vimrc ← vimrc  dots."~/.vimrc"
+  × ~/.config/tmux ← config/tmux  auto[0]
   ! wrong link ~/.config/nvim ← nvim  dots."~/.config/nvim"
     current link: ../../dotfiles/config/nvim
-  × ~/.config/tmux ← config/tmux  auto[0]
 
 Overridden rules:
   ~/.config/nvim
@@ -358,6 +364,7 @@ Overridden rules:
 Not OK: run `dots apply` to fix.
 ```
 
+- 項目の行は `✓` → `×` → `!` の順にまとめて表示する。まとまりの間に空行は入れない。同じ記号の中では元の順序を保ち、詳細の行は各項目の直下に置く。apply（8.2）と同じ規則である。
 - 要約の行には、上書きされたルールの件数（`N overridden rule(s)`）を含めない。上書きされたルールは `--verbose` の「Overridden rules:」で確認する。
 - 状態の語と詳細は、既定でも `--verbose` でも同じものを表示する。問題のある行には、直すために必要な詳細を既定の出力でも省略しない。
 - 終了コードは v0.1.0 の doctor から変えない。`--verbose` の有無で終了コードは変わらない。
@@ -385,7 +392,8 @@ Run "dots clean" to remove stale links.
 - apply は 5.3 のとおり state を更新する。
 - stale は削除しない。stale が1件以上あれば、要約の後に件数と `Run "dots clean" to remove them.` を表示する。
 - state の書き込みに失敗しても、作ったリンクは戻さない。警告を表示し、終了コードは1とする。
-- 項目の行は `✓` → `+` → `~` → `!` の順にまとめて表示する。`✓` の行と他の行の間には空行を1つ入れる（どちらかがなければ入れない）。同じ記号の中では元の順序を保ち、`backup:` などの補足行は各項目の直下に置く。`--dry-run` の計画も同じ順にする。
+- 項目の行は `✓` → `+` → `~` → `!` の順にまとめて表示する。まとまりの間に空行は入れない。同じ記号の中では元の順序を保ち、`backup:` などの補足行は各項目の直下に置く。`--dry-run` の計画も同じ順にする。
+- 変化のなかった項目（`✓`）が多い場合は折りたたむ。要約の `already ok` は `unchanged` に変える（8.5）。
 
 ### 8.3 変更した項目の source を表示する（#9）
 
@@ -416,7 +424,7 @@ Repository: ~/dotfiles
   ✓ ~/.config/starship.toml
   + ~/.config/wezterm       ← config/wezterm
 
-1 created, 3 already ok
+1 created, 3 unchanged
 ```
 
 - 対象は「変更した」項目とする。apply と apply --dry-run の `+`（作成）と `~`（置換）、clean の `-`（削除）の行に付ける。`✓` と `!` の行には付けない。
@@ -550,6 +558,84 @@ bubbletea は v2 を使う。v1 で書いて後から v2 へ移る手間を省�
 - #4 の再現手順でプロンプトが止まらない。
 - Linux と macOS の tty-e2e が通る。Windows の CI で、ビルドと部品の単体テストが通る。
 
+### 8.5 変化のなかった項目の折りたたみ（#10）
+
+#### 現象
+
+apply の結果には、変化のなかった項目（`✓`）がすべて並ぶ。管理する項目が増えると、作成や置換した行が `✓` の行に埋もれる。
+
+#### 設定
+
+dots.toml に新しいトップレベルのテーブル `[general]` を加え、次の2つのキーを置く。
+
+```toml
+[general]
+fold_unchanged = true
+fold_unchanged_keep = 5    # 折りたたむときに残す ✓ の行数
+```
+
+| キー | 型 | 既定値 | 意味 |
+| --- | --- | --- | --- |
+| fold_unchanged | 真偽値 | true | 変化のなかった項目を折りたたむかどうか |
+| fold_unchanged_keep | 0 以上の整数 | 5 | 折りたたむときに残す `✓` の行数 |
+
+- `[general]` も、その中の各キーも省略できる。省略したキーには既定値を使う。
+- `[general]` の中の未知のキー、型の違い、`fold_unchanged_keep` の負の数はエラーにする。v0.1.0 の dots.toml の検証と同じく、打ち間違いをそのまま通さない。
+- `fold_unchanged = false` のときも、`fold_unchanged_keep` の値は検証する。
+- `[general]` は OS ごとに分けない。`[general.linux]` のような書き方は v0.2.0 では設けず、エラーにする。
+
+#### 表示
+
+`fold_unchanged_keep = 2` の場合の例を示す。
+
+```text
+Repository: ~/dotfiles
+
+  ✓ ~/.config/fish
+  ✓ ~/.config/nvim
+  … 47 unchanged
+  + ~/.config/wezterm       ← config/wezterm
+
+1 created, 49 unchanged
+```
+
+- 対象は apply と apply --dry-run の `✓` の行とする。status と clean の行は折りたたまない。
+- 変化のなかった項目の件数を U、`fold_unchanged_keep` を K とする。U が K + 1 以下なら全件を表示する。U が K + 1 を超えたら、先頭から K 件の `✓` を表示し、残りの U − K 件を `… N unchanged` の1行にまとめる（N = U − K）。
+- U が K + 1 のときに折りたたまないのは、1行を `…` の1行に置き換えても行数が減らないためである。
+- K = 0 なら `✓` の行を1行も表示せず、`… N unchanged` だけを表示する（U が2件以上の場合）。
+- 「先頭」は、8.2 で並べた後の `✓` のまとまりの中の順序（元の順序）とする。
+- `… N unchanged` の行は `✓` のまとまりの最後に置く。2スペースの字下げの後に記号の位置で `…`（U+2026）を出し、空白1つの後に `N unchanged` を続ける。薄い色（dim）で表示する。色なしの場合も同じ文字を出す。
+- `… N unchanged` の行には `←` を付けず、`←` の列揃え（8.3）の計算にも含めない。
+- `fold_unchanged = false` のときは全件を表示し、`fold_unchanged_keep` は使わない。
+- `dots apply --verbose`（`--dry-run` と併用できる）を付けると、設定にかかわらず全件を表示する。apply の `--verbose` は折りたたみを無効にするだけで、`← source` を付ける行（8.3）は変えない。
+- 要約では、apply と apply --dry-run の `already ok` を `unchanged` に変える。件数は、折りたたんだかどうかにかかわらず、変化のなかった項目の全件数とする。
+- すべての項目に変化がない場合も同じ規則で折りたたみ、その後に `Everything is up to date.` を表示する。
+
+#### v0.2.0 で決めたこと
+
+- 折りたたみは既定で有効にする。apply の結果で知りたいのは何が変わったかで、`✓` の一覧は項目が増えるほど邪魔になるためである。全件を見たいときは `--verbose` を付けるか、`fold_unchanged = false` を書く。
+- 設定は dots.toml の `[general]` に置く。`[general]` は今後ほかの設定も入れるテーブルとして新しく作る。
+- 残す行数のキー名は `fold_unchanged_keep` とする。`fold_unchanged_after` は「5秒後」のように時間と読まれやすい。`fold_unchanged_threshold` は折りたたんだ後に何件残るかが分からない。`fold_unchanged_max` は「最大5件を折りたたむ」とも読める。`keep` なら「折りたたむときに5件残す」としか読めず、0 のときに1件も残さない意味ともそのまま合う。
+- 有効・無効と残す行数は別のキーにする。1つの整数にまとめると、0 を「全部折りたたむ」に使っているので、無効を表すために -1 のような特別な値が要る。
+- 残す `✓` は、意味のある選び方がないので先頭から K 件とする。
+
+#### やること
+
+- [ ] config に `[general]` の読み込みと検証を加える。トップレベルの未知のキーのエラーメッセージで、使えるキーに `general` を加える。
+- [ ] ui の項目一覧に折りたたみを加える（apply、apply --dry-run）。
+- [ ] apply の要約の `already ok` を `unchanged` に変える。
+- [ ] apply と status で、`✓` のまとまりと他の行の間の空行をなくす（8.1、8.2）。
+- [ ] `dots apply --verbose` を加える。
+- [ ] README の出力例と dots.toml の説明を更新する。
+- [ ] 単体テスト: `[general]` の省略・既定値・型の違い・負の数・未知のキー、U が K 以下・K + 1・K + 2 以上の場合、K = 0、`fold_unchanged = false`、`--verbose`、色なしの出力、`←` の列揃えに `…` の行が影響しないこと。
+
+#### 完了の条件
+
+- `[general]` を書かない dots.toml で、変化のなかった項目が7件以上あると、先頭の5件と `… N unchanged` が表示される。
+- `fold_unchanged = false` または `--verbose` で、全件が表示される。
+- apply と apply --dry-run の要約に `already ok` が出ず、`unchanged` が出る。
+- apply と status の出力で、`✓` の行と他の行の間に空行が入らない。
+
 ## 9. 表示と記号
 
 v0.1.0 の8章の記号に次を加える。
@@ -558,6 +644,7 @@ v0.1.0 の8章の記号に次を加える。
 | --- | --- | --- | --- |
 | `-` | 赤 | 削除（リンクを外す）。短い語 `stale` を付ける | clean |
 | `!` | 黄 | 問題あり。新しい短い語として `stale`（status）、`skipped` と `failed`（clean）を加える | status、clean |
+| `…` | 薄い色 | 折りたたんだ変化のなかった項目。`… N unchanged` の形で使う（8.5） | apply |
 
 - 項目行の形（2スペースの字下げ、記号、パス、詳細は4スペースの字下げ）は v0.1.0 と同じとする。
 - 色なしの扱い、エラーメッセージ中のパスの省略も v0.1.0 と同じとする。
@@ -590,9 +677,10 @@ Wave 1（並行）
 
 Wave 2（A、B、C をマージした後）
   D: #6 後半   status の stale 表示・apply の案内・dots clean（7章、8.1、8.2）
+  E: #10       [general] の読み込み・apply の折りたたみ・apply --verbose・空行の削除（8.1、8.2、8.5）
 ```
 
-D は、A の確認プロンプトの部品（clean の Yes／No）と、B の `←` 表示（status の stale、clean の `-` の行）を使うので、後に回す。
+D は、A の確認プロンプトの部品（clean の Yes／No）と、B の `←` 表示（status の stale、clean の `-` の行）を使うので、後に回す。E は、B で ui パッケージの項目一覧（列揃え）が変わった後に手を入れるので、後に回す。D と E は並行して進められる。
 
 ## 11. 未決事項と次のバージョンへの申し送り
 
@@ -601,4 +689,3 @@ D は、A の確認プロンプトの部品（clean の Yes／No）と、B の `
 - clean 時に source の中身をコピーして残すオプション（dots の利用をやめる場合向け）。
 - 共通ルールを特定のOSでだけ無効にする書き方（例: `[dots.darwin]` の `"~/.vimrc" = false`、auto の OS ごとの ignore）。共通ルールを消すと全OSで配置されなくなる。このOSでだけ外したい場合は、今のスキーマでは書けない。
 - `dots diff`（Issue #1 のコメントにあるヘルプ例）。
-- #10（apply で変化のなかった項目を折りたたむ設定）。v0.2.0 に入れるかは保留。入れる場合は、設定のキー（例: `[ui] fold_unchanged`）、折りたたむ件数の閾値、#9 の `←` 表示との組み合わせを仕様に加える。
