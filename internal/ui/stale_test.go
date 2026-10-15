@@ -27,9 +27,9 @@ func TestStatusStale(t *testing.T) {
 		t.Error("ok = true, want false")
 	}
 	checkContains(t, out,
-		"  ! stale "+p("home", "tmux")+" ← config/tmux\n",
+		"  ! stale "+p("home", "tmux")+"   ← config/tmux\n",
 		"    not in dots.toml; created by dots on 2026-10-01\n",
-		"  ! stale "+p("home", "zshrc")+"\n",
+		"  ! stale "+p("home", "zshrc")+"  ← zshrc\n",
 		"    changed since dots created it; dots will not remove it\n",
 		"2 stale\n",
 		"Not OK",
@@ -41,18 +41,20 @@ func TestStatusStale(t *testing.T) {
 	if strings.Contains(out, "\x1b") {
 		t.Error("escape sequences without color")
 	}
-	if strings.Contains(out, "zshrc  ←") {
-		t.Error("a changed item has no source")
+	quiet := render(func(pr *Printer) { pr.StatusState(&apply.Plan{}, sr, false) })
+	if strings.Contains(quiet, "←") {
+		t.Errorf("status without --verbose shows sources:\n%s", quiet)
 	}
 }
 
-func TestStatusStaleSingleSpaceArrow(t *testing.T) {
+// Stale rows align their arrows like the other rows of status --verbose.
+func TestStatusStaleAlignedArrow(t *testing.T) {
 	sr := StateReport{Stale: []statefile.Stale{
 		{Record: staleRec("a", "x"), Kind: statefile.StaleLink},
 		{Record: staleRec("longer-name", "y"), Kind: statefile.StaleLink},
 	}}
 	out := render(func(pr *Printer) { pr.StatusState(&apply.Plan{}, sr, true) })
-	checkContains(t, out, "  ! stale "+p("home", "a")+" \u2190 x\n", "  ! stale "+p("home", "longer-name")+" \u2190 y\n")
+	checkContains(t, out, "  ! stale "+p("home", "a")+"            \u2190 x\n", "  ! stale "+p("home", "longer-name")+"  \u2190 y\n")
 }
 
 func TestStatusBrokenState(t *testing.T) {

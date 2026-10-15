@@ -85,7 +85,7 @@ func newCleanCmd(app *App) *cobra.Command {
 
 // clean implements `dots clean` (spec §7): it removes the stale links.
 func (a *App) clean(noConfirm, dryRun bool) error {
-	res, err := a.load()
+	res, _, err := a.load()
 	if err != nil {
 		return err
 	}

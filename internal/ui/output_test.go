@@ -40,7 +40,7 @@ func TestOutputPlanPlain(t *testing.T) {
 		"  ✓ " + fp("t", "s"),
 		"  ! error " + fp("t", "e"),
 		"    fail",
-		"1 to create, 1 to replace, 1 already ok, 1 error(s)",
+		"1 to create, 1 to replace, 1 unchanged, 1 error(s)",
 	}
 
 	for _, w := range wantLines {
@@ -174,7 +174,7 @@ func TestOutputReport(t *testing.T) {
 		"  ! failed f",
 		"    fail",
 		"  ! not processed n",
-		"1 created, 1 replaced, 1 already ok, 1 skipped, 1 failed, 1 not processed",
+		"1 created, 1 replaced, 1 unchanged, 1 skipped, 1 failed, 1 not processed",
 	}
 	for _, w := range want {
 		if !strings.Contains(out, w) {

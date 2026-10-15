@@ -36,19 +36,15 @@ func CountStale(stale []statefile.Stale) int {
 }
 
 // staleItems adds the stale rows of a status report to l and returns how many
-// there were. Like the other status rows they are not aligned: the source is
-// shown after a single space, only with withSource (verbose).
-func (p *Printer) staleItems(l *itemList, stale []statefile.Stale, withSource bool) int {
+// there were. Like the other status rows, they show their source as l.mode
+// says.
+func (p *Printer) staleItems(l *itemList, stale []statefile.Stale) int {
 	n := 0
 	for _, s := range stale {
 		e := model.Entry{Target: s.Record.Target, Source: s.Record.Source}
 		switch s.Kind {
 		case statefile.StaleLink:
-			suffix := ""
-			if withSource {
-				suffix = " " + p.paint(toneDim, arrow+" "+p.displaySource(e.Source))
-			}
-			l.itemSuffix(toneYellow, symProblem, "stale", e, suffix)
+			l.item(toneYellow, symProblem, "stale", e, false)
 			l.detail(toneDim, "not in dots.toml; created by dots on "+s.Record.RecordedAt.UTC().Format("2006-01-02"))
 		case statefile.StaleChanged:
 			l.item(toneYellow, symProblem, "stale", e, false)
@@ -100,7 +96,7 @@ func (p *Printer) CleanRows(rows []CleanRow) {
 		return
 	}
 	p.header()
-	l := p.newList()
+	l := p.newList(SourceSimple)
 	for _, r := range rows {
 		e := model.Entry{Target: r.Stale.Record.Target, Source: r.Stale.Record.Source}
 		switch r.Outcome {

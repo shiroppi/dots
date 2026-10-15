@@ -80,17 +80,16 @@ func TestStatus(t *testing.T) {
 		t.Error("ok = true, want false")
 	}
 	checkContains(t, out,
-		"\u2713 "+p("home", "ok")+" \u2190 "+p("src", "ok")+`  dots."ok"`,
+		"\u2713 "+p("home", "ok")+"                 \u2190 "+p("src", "ok")+`  dots."ok"`,
 		"\u00d7 "+p("home", "missing"),
 		"! wrong link "+p("home", "wrong"), "! conflict "+p("home", "conflict"), "! error "+p("home", "bad"),
 		"current link: ../elsewhere",
 		"    source does not exist", "    overlap",
 		"1 ok, 1 missing, 1 wrong link, 1 conflict, 1 error\n",
 		"Not OK",
-		"Overridden rules:", `kept:    dots."win"`, "ignored: auto[0] -> "+p("src", "lose"),
 	)
-	if i, j := strings.Index(out, "Overridden rules:"), strings.Index(out, "1 ok, 1 missing"); i < 0 || i > j {
-		t.Errorf("overridden rules must come before the summary:\n%s", out)
+	if strings.Contains(out, "Overridden rules:") {
+		t.Errorf("status --verbose must not list overridden rules:\n%s", out)
 	}
 }
 
@@ -142,7 +141,7 @@ func TestPlan(t *testing.T) {
 		"existing file or directory; will be backed up and replaced after confirmation",
 		"    source does not exist",
 		"Overridden rules:",
-		"1 to create, 2 to replace, 1 already ok, 1 error(s)",
+		"1 to create, 2 to replace, 1 unchanged, 1 error(s)",
 	)
 	if strings.Contains(out, `dots."ok"`) || strings.Contains(out, p("src", "ok")) || strings.Contains(out, `dots."bad"`) || strings.Contains(out, p("src", "bad")) {
 		t.Errorf("unchanged and error rows must not show source or origin:\n%s", out)
@@ -182,7 +181,7 @@ func TestReport(t *testing.T) {
 		"  + "+p("home", "c"), "  \u2713 "+p("home", "a"), "  ~ "+p("home", "r"), "! skipped "+p("home", "s1"),
 		"! failed "+p("home", "f"), "! not processed "+p("home", "n"),
 		"backup: "+arch, "    boom",
-		"1 created, 1 replaced, 1 already ok, 2 skipped, 1 failed, 1 not processed",
+		"1 created, 1 replaced, 1 unchanged, 2 skipped, 1 failed, 1 not processed",
 	)
 }
 
@@ -479,7 +478,7 @@ func TestOverridesGroupedByTarget(t *testing.T) {
 		{Target: p("home", "t2"), Winner: model.Origin{Layer: model.LayerDots, Rule: `dots."t2"`}, Loser: lose("c", "auto[2]")},
 		{Target: p("home", "t1"), Winner: win, Loser: lose("b", "auto[1]")},
 	}}
-	out := render(func(pr *Printer) { pr.Status(plan, true) })
+	out := render(func(pr *Printer) { pr.Plan(plan) })
 	want := "Overridden rules:\n" +
 		"  " + p("home", "t1") + "\n" +
 		"    kept:    " + `dots."t1"` + "\n" +

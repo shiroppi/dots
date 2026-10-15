@@ -58,7 +58,33 @@ type Config struct {
 	Dots   []Link
 	DotsOS map[string][]Link
 	Auto   []AutoGroup
+	// General holds [general] with defaults for omitted keys (spec §8.5).
+	General General
 }
+
+// General is the [general] table.
+type General struct {
+	// FoldUnchanged folds the unchanged rows of apply (spec §8.5).
+	FoldUnchanged bool
+	// FoldUnchangedKeep is how many unchanged rows stay visible when folding.
+	FoldUnchangedKeep int
+	// SourceDisplay is how apply annotates rows with their source: one of
+	// SourceOff, SourceSimple, SourceVerbose.
+	SourceDisplay string
+}
+
+// Key of [general] that selects the source annotation of apply.
+const sourceDisplayKey = "source_display"
+
+// Values of General.SourceDisplay.
+const (
+	SourceOff     = "off"     // no source
+	SourceSimple  = "simple"  // "← source" on created and replaced rows
+	SourceVerbose = "verbose" // "← source  rule" on every row, like status --verbose
+)
+
+// DefaultGeneral is [general] when the table or a key is omitted.
+var DefaultGeneral = General{FoldUnchanged: true, FoldUnchangedKeep: 5, SourceDisplay: SourceSimple}
 
 // Link is one flat-notation entry ("target" = "source").
 type Link struct {
@@ -135,7 +161,7 @@ func Parse(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("TOML syntax error: %w", err)
 	}
 	p := &parser{}
-	cfg := &Config{DotsOS: map[string][]Link{}}
+	cfg := &Config{DotsOS: map[string][]Link{}, General: DefaultGeneral}
 
 	for _, k := range sortedKeys(raw) {
 		switch k {
@@ -143,8 +169,10 @@ func Parse(data []byte) (*Config, error) {
 			p.parseDots(raw[k], cfg)
 		case "auto":
 			p.parseAuto(raw[k], cfg)
+		case "general":
+			p.parseGeneral(raw[k], cfg)
 		default:
-			p.errf("unknown top-level key %q (only \"dots\" and \"auto\" are allowed)", k)
+			p.errf("unknown top-level key %q (only \"dots\", \"auto\" and \"general\" are allowed)", k)
 		}
 	}
 	if len(p.errs) > 0 {
@@ -237,6 +265,52 @@ func (p *parser) parseDots(v interface{}, cfg *Config) {
 			}
 		default:
 			p.errf("dots.%q: must be a string (source path), got %s", k, typeName(val))
+		}
+	}
+}
+
+func (p *parser) parseGeneral(v interface{}, cfg *Config) {
+	tbl, ok := v.(map[string]interface{})
+	if !ok {
+		p.errf("general: must be a table, got %s", typeName(v))
+		return
+	}
+	g := &cfg.General
+	for _, k := range sortedKeys(tbl) {
+		val := tbl[k]
+		switch k {
+		case "fold_unchanged":
+			b, isBool := val.(bool)
+			if !isBool {
+				p.errf("general.%s: must be a boolean, got %s", k, typeName(val))
+				continue
+			}
+			g.FoldUnchanged = b
+		case "fold_unchanged_keep":
+			n, isInt := val.(int64)
+			if !isInt {
+				p.errf("general.%s: must be an integer, got %s", k, typeName(val))
+				continue
+			}
+			if n < 0 {
+				p.errf("general.%s: must be 0 or more, got %d", k, n)
+				continue
+			}
+			g.FoldUnchangedKeep = int(n)
+		case sourceDisplayKey:
+			s, isStr := val.(string)
+			if !isStr {
+				p.errf("general.%s: must be a string, got %s", k, typeName(val))
+				continue
+			}
+			switch s {
+			case SourceOff, SourceSimple, SourceVerbose:
+				g.SourceDisplay = s
+			default:
+				p.errf("general.%s: unknown value %q (allowed: %q, %q, %q)", k, s, SourceOff, SourceSimple, SourceVerbose)
+			}
+		default:
+			p.errf("general: unknown key %q (allowed: fold_unchanged, fold_unchanged_keep, %s)", k, sourceDisplayKey)
 		}
 	}
 }

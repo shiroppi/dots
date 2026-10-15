@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 
@@ -11,6 +12,23 @@ import (
 
 // arrow introduces the source of an item ("+ target  ← source").
 const arrow = "←"
+
+// symFold starts the line that stands for folded unchanged rows (spec §8.5).
+const symFold = "…"
+
+// SourceMode is how the rows of a listing show their source.
+type SourceMode int
+
+const (
+	// SourceSimple shows "← source" on the rows that change something
+	// (created, replaced, removed). It is the zero value and the default of
+	// apply.
+	SourceSimple SourceMode = iota
+	// SourceOff shows no source.
+	SourceOff
+	// SourceVerbose shows "← source  rule" on every row that has a source.
+	SourceVerbose
+)
 
 // itemList buffers the lines of one listing so that the arrows of its rows
 // can be aligned in one column. Rows without a source and detail lines are
@@ -23,6 +41,11 @@ type itemList struct {
 	// everything else. The order inside a group is kept. It is shared by the
 	// plan, the apply report and status.
 	grouped bool
+	// mode selects the rows that show their source.
+	mode SourceMode
+	// foldKeep, when 0 or more, folds the ok rows of a grouped list after the
+	// first foldKeep of them (spec §8.5). Negative means no folding.
+	foldKeep int
 }
 
 type listLine struct {
@@ -35,25 +58,24 @@ type listLine struct {
 	isItem bool // first line of an item block
 }
 
-func (p *Printer) newList() *itemList { return &itemList{p: p} }
-
-// item adds "  <symbol> [word ]<target>", followed by "← source" when
-// withSource is set.
-func (l *itemList) item(t tone, sym, word string, e model.Entry, withSource bool) {
-	ln := l.head(t, sym, word, e)
-	if withSource {
-		ln.hasSrc = true
-		ln.src = l.p.displaySource(e.Source)
-		ln.srcW = textWidth(ln.src)
-	}
-	l.lines = append(l.lines, ln)
+func (p *Printer) newList(mode SourceMode) *itemList {
+	return &itemList{p: p, mode: mode, foldKeep: -1}
 }
 
-// itemSuffix adds "  <symbol> [word ]<target><suffix>". The suffix is already
-// painted and not aligned, like the mapping of status --verbose.
-func (l *itemList) itemSuffix(t tone, sym, word string, e model.Entry, suffix string) {
+// item adds "  <symbol> [word ]<target>", followed by "← source" as mode
+// says: changed marks the rows that SourceSimple annotates. SourceVerbose
+// also adds the rule of the entry when it has one. Entries without a source
+// never get an arrow.
+func (l *itemList) item(t tone, sym, word string, e model.Entry, changed bool) {
 	ln := l.head(t, sym, word, e)
-	ln.head += suffix
+	if e.Source != "" && (l.mode == SourceVerbose || l.mode == SourceSimple && changed) {
+		ln.hasSrc = true
+		ln.src = l.p.displaySource(e.Source)
+		if l.mode == SourceVerbose && e.Origin.Rule != "" {
+			ln.src += "  " + e.Origin.String()
+		}
+		ln.srcW = textWidth(ln.src)
+	}
 	l.lines = append(l.lines, ln)
 }
 
@@ -135,14 +157,32 @@ func (l *itemList) sortBlocks() {
 		blocks[len(blocks)-1] = append(blocks[len(blocks)-1], ln)
 	}
 	slices.SortStableFunc(blocks, func(a, b []listLine) int { return a[0].rank - b[0].rank })
-	l.lines = nil
-	for i, b := range blocks {
-		// One blank line separates the ok rows from the changed ones.
-		if i > 0 && b[0].rank > 0 && blocks[i-1][0].rank == 0 {
-			l.lines = append(l.lines, listLine{rank: b[0].rank})
-		}
-		l.lines = append(l.lines, b...)
+	if l.foldKeep >= 0 {
+		blocks = l.fold(blocks)
 	}
+	l.lines = slices.Concat(blocks...)
+}
+
+// fold replaces the ok blocks after the first foldKeep with one dim
+// "… N unchanged" line (spec §8.5). The blocks are sorted, so the ok ones
+// lead. Folding a single block would not save a line, so U ok blocks are
+// folded only when U > foldKeep+1.
+func (l *itemList) fold(blocks [][]listLine) [][]listLine {
+	u := 0
+	for u < len(blocks) && blocks[u][0].rank == symbolRank(symOK) {
+		u++
+	}
+	k := l.foldKeep
+	if u <= k+1 {
+		return blocks
+	}
+	text := fmt.Sprintf("%s %d unchanged", symFold, u-k)
+	folded := []listLine{{
+		head:   itemIndent + l.p.paint(toneDim, text),
+		headW:  textWidth(itemIndent + text),
+		isItem: true,
+	}}
+	return slices.Concat(blocks[:k], [][]listLine{folded}, blocks[u:])
 }
 
 // arrowPadding returns, for each row, the spaces to print between its target

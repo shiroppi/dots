@@ -24,6 +24,13 @@ type Printer struct {
 	Home  string // when non-empty, paths under Home are shown as ~/... (display only)
 	Root  string // repository root (absolute); when set, sources under it are shown relative to it
 	Width int    // terminal width in columns; 0 when unknown (arrows are then always aligned)
+	// Source is how the apply plan and report show sources (spec §8.3);
+	// status and clean choose their own.
+	Source SourceMode
+	// Fold folds the unchanged rows of the apply plan and report, keeping
+	// the first FoldKeep of them (spec §8.5).
+	Fold     bool
+	FoldKeep int
 }
 
 type tone int
@@ -188,11 +195,6 @@ func (p *Printer) itemLine(t tone, sym, word string, e model.Entry, suffix strin
 	p.printf("%s%s %s%s\n", itemIndent, p.paint(t, mark), p.display(e.Target), suffix)
 }
 
-// mapping is the status --verbose-only " ← source  origin" tail of an item line.
-func (p *Printer) mapping(e model.Entry) string {
-	return " " + p.paint(toneDim, arrow+" "+p.displaySource(e.Source)) + "  " + p.paint(toneDim, e.Origin.String())
-}
-
 // detail prints one line indented under its item.
 func (p *Printer) detail(t tone, text string) {
 	p.printf("%s%s\n", detailIndent, p.paint(t, text))
@@ -249,7 +251,7 @@ type count struct {
 	noun string
 }
 
-// summary joins the non-zero counts: "2 to create, 3 already ok".
+// summary joins the non-zero counts: "2 to create, 3 unchanged".
 func summary(parts ...count) string {
 	var out []string
 	for _, c := range parts {
@@ -284,8 +286,7 @@ func statusMark(r state.Result) (t tone, sym, word string) {
 
 // Status prints the status report (spec §8). ok is false when any item is not
 // a valid link or has an error. Rows show the mark and the target; verbose
-// adds the mapping (← source) and the origin of every rule, and the list of
-// overridden rules.
+// adds the source and the rule of every row (SourceVerbose).
 func (p *Printer) Status(plan *apply.Plan, verbose bool) (ok bool) {
 	return p.StatusState(plan, StateReport{}, verbose)
 }
@@ -296,7 +297,11 @@ func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (o
 	p.header()
 	ok = true
 	var nOK, nMissing, nWrong, nConflict, nErr int
-	l := p.newList()
+	mode := SourceOff
+	if verbose {
+		mode = SourceVerbose
+	}
+	l := p.newList(mode)
 	l.grouped = true
 	for _, it := range plan.Items {
 		r := it.Result
@@ -316,11 +321,7 @@ func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (o
 		if sym != symOK {
 			ok = false
 		}
-		suffix := ""
-		if verbose {
-			suffix = p.mapping(r.Entry)
-		}
-		l.itemSuffix(t, sym, word, r.Entry, suffix)
+		l.item(t, sym, word, r.Entry, false)
 		if r.Err == nil && r.Status == state.InvalidLink {
 			l.detail(toneDim, "current link: "+oneLine(r.Current))
 		}
@@ -328,7 +329,7 @@ func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (o
 			l.errorDetails(r.Err)
 		}
 	}
-	nStale := p.staleItems(l, sr.Stale, verbose)
+	nStale := p.staleItems(l, sr.Stale)
 	if sr.Err != nil {
 		nErr++
 		l.item(toneYellow, symProblem, "error", model.Entry{Target: sr.Path}, false)
@@ -337,9 +338,6 @@ func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (o
 	l.flush()
 	planOK := ok
 	ok = ok && nStale == 0 && sr.Err == nil
-	if verbose {
-		p.overrides(plan.Overrides)
-	}
 	p.printf("\n")
 	if len(plan.Items) == 0 && nStale == 0 && sr.Err == nil {
 		p.printf("No links are defined.\n")
@@ -362,12 +360,22 @@ func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (o
 	return ok
 }
 
+// applyList is the grouped listing of the apply plan and report: sources as
+// p.Source says, unchanged rows folded when p.Fold is set.
+func (p *Printer) applyList() *itemList {
+	l := p.newList(p.Source)
+	l.grouped = true
+	if p.Fold {
+		l.foldKeep = p.FoldKeep
+	}
+	return l
+}
+
 // Plan prints the apply --dry-run plan.
 func (p *Printer) Plan(plan *apply.Plan) {
 	p.header()
 	var nCreate, nSkip, nReplace, nErr int
-	l := p.newList()
-	l.grouped = true
+	l := p.applyList()
 	for _, it := range plan.Items {
 		r := it.Result
 		switch it.Action {
@@ -395,7 +403,7 @@ func (p *Printer) Plan(plan *apply.Plan) {
 		return
 	}
 	p.printf("%s\n", summary(count{nCreate, "to create"}, count{nReplace, "to replace"},
-		count{nSkip, "already ok"}, count{nErr, "error(s)"}))
+		count{nSkip, "unchanged"}, count{nErr, "error(s)"}))
 }
 
 // Blocked prints the plan of an apply that was rejected before any change
@@ -426,8 +434,7 @@ func (p *Printer) Blocked(plan *apply.Plan) {
 func (p *Printer) Report(rep *apply.Report) {
 	p.header()
 	warnings := 0
-	l := p.newList()
-	l.grouped = true
+	l := p.applyList()
 	for _, ir := range rep.Items {
 		e := ir.Item.Result.Entry
 		switch ir.Outcome {
@@ -462,7 +469,7 @@ func (p *Printer) Report(rep *apply.Report) {
 		return
 	}
 	p.printf("%s\n", summary(count{rep.Created(), "created"}, count{rep.Replaced(), "replaced"},
-		count{rep.AlreadyOK(), "already ok"}, count{rep.SkippedByUser(), "skipped"},
+		count{rep.AlreadyOK(), "unchanged"}, count{rep.SkippedByUser(), "skipped"},
 		count{rep.Failed(), "failed"}, count{rep.NotProcessed(), "not processed"}, count{warnings, "warning(s)"}))
 }
 

@@ -37,6 +37,11 @@ ignore = ["README.md", ".DS_Store"]
 source = "config/darwin"
 target = "~/.config"
 os_only = true
+
+[general]
+fold_unchanged = true
+fold_unchanged_keep = 5
+source_display = "simple"
 ```
 
 * `dots` — Link individual files or directories.
@@ -44,6 +49,10 @@ os_only = true
 * `[os]` — OS-specific rules. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
 * `os_only` — `auto.[os]` only. Excludes the rule's `source` from the common `auto` rules, so the contents of `config/darwin` are linked only on macOS.
 * `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
+* `general` — Optional display settings for `dots apply`. Every key may be omitted; an unknown key, a value of the wrong type or an unknown value is an error. `[general]` is not OS-specific.
+  * `fold_unchanged` (boolean, default `true`) — Fold unchanged (`✓`) rows into one `… N unchanged` line.
+  * `fold_unchanged_keep` (integer >= 0, default `5`) — How many unchanged rows stay visible when folding.
+  * `source_display` (`"off"` | `"simple"` | `"verbose"`, default `"simple"`) — Which rows show their source (`← source`) in `dots apply` and `dots apply --dry-run`: `"off"` shows none, `"simple"` only the created (`+`) and replaced (`~`) rows, `"verbose"` every row, followed by the rule that produced it (`← zsh/zshrc  auto[0]`).
 
 ### Directory structure
 
@@ -100,13 +109,22 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    dots apply
    ```
 
-   Rows are grouped by outcome (`✓` already ok, `+` created, `~` replaced, `!` problems), so what changed is at the bottom. Each created (`+`) or replaced (`~`) link is shown with its source, relative to the repository root:
+   Rows are grouped by outcome (`✓` unchanged, `+` created, `~` replaced, `!` problems), so what changed is at the bottom. Each created (`+`) or replaced (`~`) link is shown with its source, relative to the repository root. When many rows are unchanged, only the first few are listed and the rest are folded into one line (see `[general]`; shown here with `fold_unchanged_keep = 2`):
    ```
-     ✓ ~/.config/starship.toml
+     ✓ ~/.config/fish
+     ✓ ~/.config/nvim
+     … 47 unchanged
+     + ~/.vimrc        ← vimrc
+     ~ ~/.config/tmux  ← config/tmux
 
-     + ~/.vimrc                  ← vimrc
-     ~ ~/.config/tmux            ← config/tmux
+   2 created, 49 unchanged
    ```
+   `dots apply --verbose` lists every unchanged row instead of folding them (it does not change `source_display`).
+4. Check the state at any time:
+   ```bash
+   dots status
+   ```
+   `dots status --verbose` also shows the source and the rule of each row (`← nvim  dots."~/.config/nvim"`). It does not list overridden rules; `dots apply --dry-run` does.
 
 <!-- ### Stale links -->
 <!---->

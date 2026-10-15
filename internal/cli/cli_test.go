@@ -262,10 +262,13 @@ func TestStatus(t *testing.T) {
 	if c := te.run("status", "--verbose"); c != 1 {
 		t.Errorf("verbose: want 1, got %d", c)
 	}
-	for _, want := range []string{"\u2190 a", "\u2190 b2", `dots."~/.a"`, "Overridden rules:"} {
+	for _, want := range []string{"\u2190 a", "\u2190 b2", `dots."~/.a"`} {
 		if !strings.Contains(te.out.String(), want) {
 			t.Errorf("verbose status lacks %q, got %q", want, te.out.String())
 		}
+	}
+	if strings.Contains(strings.ToLower(te.out.String()), "overridden") {
+		t.Errorf("verbose status must not show overridden rules, got %q", te.out.String())
 	}
 
 	if c := te.run("apply"); c != 0 {
@@ -660,7 +663,7 @@ ignore = ["*.txt"]
 	if c := te.run("status", "--verbose"); c != 0 {
 		t.Errorf("status failed: %d", c)
 	}
-	if !strings.Contains(te.out.String(), "✓ ") || !strings.Contains(te.out.String(), "ign \u2190 ") {
+	if !strings.Contains(te.out.String(), "✓ ") || !strings.Contains(te.out.String(), "ign  \u2190 ") {
 		t.Errorf("status output incorrect: %q", te.out.String())
 	}
 	te.out.Reset()
@@ -771,7 +774,7 @@ func TestHelp(t *testing.T) {
 		})
 	}
 
-	applyHelp := "Apply dotfiles\n\nUsage:\n  dots apply [options]\n\nOptions:\n      --dry-run   Show what would be done without changing anything\n  -h, --help      Show help\n"
+	applyHelp := "Apply dotfiles\n\nUsage:\n  dots apply [options]\n\nOptions:\n      --dry-run   Show what would be done without changing anything\n  -h, --help      Show help\n      --verbose   Show every unchanged row instead of folding them\n"
 	te.run("apply", "--help")
 	if out := te.out.String(); out != applyHelp {
 		t.Errorf("apply help mismatch:\nwant:\n%q\ngot:\n%q", applyHelp, out)

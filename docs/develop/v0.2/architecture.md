@@ -60,12 +60,13 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 | doctor → status | `dots doctor` を `dots status` に改名する。草案の `status`（管理ファイルの一覧と状態）と `doctor` は両立しないと分かったため、`status` に統合する（8.1） | `dots doctor` は使えなくなる（別名も残さない）。スクリプトは `dots status` に切り替える |
 | status | stale（設定にはないが dots が作ったリンク）を表示する（8.1） | stale があると終了コード1になる。stale は v0.2.0 で記録したリンクからしか生じないので、更新直後に結果が変わることはない |
 | apply | stale があると件数と片付け方を表示する（8.2）。変更した項目に `← source` を表示する（8.3） | stale を自動では消さない |
-| status の source 表示と --verbose | 既定では source と出所（`auto[0]` など）を表示しない。`--verbose` を付けると全項目に `← source` と出所を表示し、v0.1.0 の `-> source` は `← source` に変わる。上書きされたルールの一覧は `--verbose` のときだけ表示し、要約の「上書きされたルールの件数」は廃止する（8.1、8.3） | 表示の変更。v0.1.0 の doctor の出力を解析しているスクリプトには影響する |
+| status の source 表示と --verbose | 既定では source と出所（`auto[0]` など）を表示しない。`--verbose` を付けると全項目に `← source` と出所を表示し、`←` の位置をそろえる。v0.1.0 の `-> source` は `← source` に変わる。上書きされたルールの一覧（Overridden rules）は status では表示しない（apply --dry-run では表示する）。要約の「上書きされたルールの件数」は廃止する（8.1、8.3） | 表示の変更。v0.1.0 の doctor の出力を解析しているスクリプトには影響する |
 | Go の最小バージョン | 1.24 から 1.26 に上げる（8.4） | `go install` で入れる場合は Go 1.26 以上が必要になる。配布バイナリには影響しない |
 | 確認プロンプト | huh をやめ、bubbletea で書いた確認プロンプトにする（8.4） | 選択肢と答えの意味は v0.1.0 と同じ。操作方法が変わる |
 | edit の削除 | `dots edit` を削除する（1.2） | `dots edit` は使えなくなる（別名も残さない）。`$EDITOR dots.toml` などで直接開く |
-| dots.toml の `[general]` | 新しいトップレベルのテーブル `[general]` を加える。v0.2.0 では `fold_unchanged` と `fold_unchanged_keep` を置く（8.5） | `[general]` を書いた dots.toml は、v0.1.0 の dots では未知のトップレベルキーとしてエラーになる |
+| dots.toml の `[general]` | 新しいトップレベルのテーブル `[general]` を加える。v0.2.0 では `fold_unchanged`、`fold_unchanged_keep`、`source_display` を置く（8.5、8.6） | `[general]` を書いた dots.toml は、v0.1.0 の dots では未知のトップレベルキーとしてエラーになる |
 | apply の折りたたみ | 変化のなかった項目（`✓`）が多いと、先頭の数件だけ表示して残りを `… N unchanged` の1行にまとめる。既定で有効。`dots apply --verbose` で全件を表示する（8.5） | 表示の変更 |
+| apply の source 表示 | `[general]` の `source_display`（`off`、`simple`、`verbose`）で、apply と apply --dry-run の行に付ける `← source` を切り替える。既定の `simple` は v0.2.0 の 8.3 の動作（8.6） | 新規。既定値では動作は変わらない |
 | apply の要約の語 | `already ok` を `unchanged` に変える（apply、apply --dry-run。8.5） | 表示の変更。出力を解析しているスクリプトには影響する |
 | 項目のまとまりの間の空行 | apply と status で、`✓` の行と他の行の間に入れていた空行をなくす（8.1、8.2） | 表示の変更 |
 | 新コマンド | clean（7章） | - |
@@ -344,28 +345,23 @@ Repository: ~/dotfiles
 Not OK: run `dots apply` to fix.
 ```
 
-`--verbose` を付けると、全項目の配置先の後ろに `← source` と出所を表示する。出所は薄い色で、source の後ろに置く。あわせて、同じ配置先に複数のルールがあったときの「Overridden rules:」の一覧（採用したルールと、無視したルールとその source）を、項目の後、要約の前に表示する。同じ配置先は1つにまとめ、`kept:` を1行、`ignored:` を無視したルールの数だけ（2つ目以降は値の位置をそろえて）表示する。
+`--verbose` を付けると、`← source` と出所を、source が分かる全項目に表示する。出所は薄い色で、source の後ろに2スペース空けて置く。`←` の位置は、apply（8.3）と同じ規則で全項目をそろえる。表示は apply の `source_display = "verbose"`（8.6）と同じ処理で作る。status は `--verbose` なしを `off`、`--verbose` ありを `verbose` として扱い、`[general]` の `source_display` には従わない。
 
 ```
 $ dots status --verbose
 Repository: ~/dotfiles
 
-  ✓ ~/.vimrc ← vimrc  dots."~/.vimrc"
-  × ~/.config/tmux ← config/tmux  auto[0]
-  ! wrong link ~/.config/nvim ← nvim  dots."~/.config/nvim"
+  ✓ ~/.vimrc                   ← vimrc  dots."~/.vimrc"
+  × ~/.config/tmux             ← config/tmux  auto[0]
+  ! wrong link ~/.config/nvim  ← nvim  dots."~/.config/nvim"
     current link: ../../dotfiles/config/nvim
-
-Overridden rules:
-  ~/.config/nvim
-    kept:    dots."~/.config/nvim"
-    ignored: auto[0] -> config/nvim
 
 1 ok, 1 missing, 1 wrong link
 Not OK: run `dots apply` to fix.
 ```
 
 - 項目の行は `✓` → `×` → `!` の順にまとめて表示する。まとまりの間に空行は入れない。同じ記号の中では元の順序を保ち、詳細の行は各項目の直下に置く。apply（8.2）と同じ規則である。
-- 要約の行には、上書きされたルールの件数（`N overridden rule(s)`）を含めない。上書きされたルールは `--verbose` の「Overridden rules:」で確認する。
+- 要約の行には、上書きされたルールの件数（`N overridden rule(s)`）を含めない。status は上書きされたルールの一覧（`Overridden rules:`）を `--verbose` でも表示しない。この一覧は `dots apply --dry-run` で確認する。
 - 状態の語と詳細は、既定でも `--verbose` でも同じものを表示する。問題のある行には、直すために必要な詳細を既定の出力でも省略しない。
 - 終了コードは v0.1.0 の doctor から変えない。`--verbose` の有無で終了コードは変わらない。
 
@@ -382,8 +378,8 @@ Repository: ~/dotfiles
 Run "dots clean" to remove stale links.
 ```
 
-- StaleLink は `! stale` とする。`--verbose` では、記録の source を `←` の後に表示する（8.3）。
-- StaleChanged は `! stale` とし、詳細に変更されていることを表示する。dots clean では削除されないことも示す。
+- StaleLink は `! stale` とする。`--verbose` では、記録の source を `←` の後に表示する。`←` は他の行と同じ列にそろえる（8.3）。
+- StaleChanged は `! stale` とし、詳細に変更されていることを表示する。dots clean では削除されないことも示す。`--verbose` では、StaleLink と同じく記録の source を表示する。
 - StaleGone は表示しない。status は state を書き換えないので、記録はそのまま残る。
 - StaleLink と StaleChanged があれば、status の終了コードは1とする。`!` は要対応を表すという v0.1.0 の8章の約束に合わせる。state が壊れている場合（5.5）も1とする。
 
@@ -422,17 +418,18 @@ Repository: ~/dotfiles
   ✓ ~/.config/fish
   ✓ ~/.config/nvim
   ✓ ~/.config/starship.toml
-  + ~/.config/wezterm       ← config/wezterm
+  + ~/.config/wezterm  ← config/wezterm
 
 1 created, 3 unchanged
 ```
 
-- 対象は「変更した」項目とする。apply と apply --dry-run の `+`（作成）と `~`（置換）、clean の `-`（削除）の行に付ける。`✓` と `!` の行には付けない。
+- 既定（`source_display = "simple"`、8.6）の対象は「変更した」項目とする。apply と apply --dry-run の `+`（作成）と `~`（置換）、clean の `-`（削除）の行に付ける。`✓` と `!` の行には付けない。`[general]` の `source_display` で、付けない（`off`）ことや、全項目に出所つきで付ける（`verbose`）ことも選べる（8.6）。clean の行は設定に従わず、常にこの規則とする。
 - source はリポジトリルートからの相対パスで、/ 区切りで表示する（v0.1.0 の8章の表示規則と同じ）。stale の項目は state に記録した source を使う。
 - `linked to` のような語は使わず、`←` だけを使う。
 - source は薄い色（dim）で表示する。色なしの場合（`NO_COLOR`、TTY でない場合）も `← source` の文字は出す。
 - `←` の位置は、その一覧で `←` を付ける行のうち最も長い「記号＋配置先」に合わせて揃える。幅は表示幅（全角文字は2）で数える。揃えた結果が端末幅を超える場合は、揃えずに配置先の後ろに空白2つで続ける。
 - status の source の表示（v0.1.0 の8章の `-> source`）も `←` に変える。矢印の向きと意味を、すべてのコマンドで「配置先 ← source」にそろえるためである。status は既定では source と出所を表示せず、`--verbose` を付けたときだけ全項目に `← source` と出所を表示する（8.1）。変更した項目だけに付ける規則は、apply、clean に適用する。
+- apply、apply --dry-run、status、clean は、同じ表示処理（ui の `SourceMode`）で行を作る。そのため `←` の列揃えは status --verbose と stale の行にも同じように働く。
 
 #### やること
 
@@ -566,21 +563,23 @@ apply の結果には、変化のなかった項目（`✓`）がすべて並ぶ
 
 #### 設定
 
-dots.toml に新しいトップレベルのテーブル `[general]` を加え、次の2つのキーを置く。
+dots.toml に新しいトップレベルのテーブル `[general]` を加え、次の3つのキーを置く。`source_display` は 8.6 で扱う。
 
 ```toml
 [general]
 fold_unchanged = true
 fold_unchanged_keep = 5    # 折りたたむときに残す ✓ の行数
+source_display = "simple"  # off | simple | verbose（8.6）
 ```
 
 | キー | 型 | 既定値 | 意味 |
 | --- | --- | --- | --- |
 | fold_unchanged | 真偽値 | true | 変化のなかった項目を折りたたむかどうか |
 | fold_unchanged_keep | 0 以上の整数 | 5 | 折りたたむときに残す `✓` の行数 |
+| source_display | 文字列（`"off"`、`"simple"`、`"verbose"`） | `"simple"` | apply と apply --dry-run の行に `← source` を付ける範囲（8.6） |
 
 - `[general]` も、その中の各キーも省略できる。省略したキーには既定値を使う。
-- `[general]` の中の未知のキー、型の違い、`fold_unchanged_keep` の負の数はエラーにする。v0.1.0 の dots.toml の検証と同じく、打ち間違いをそのまま通さない。
+- `[general]` の中の未知のキー、型の違い、`fold_unchanged_keep` の負の数、`source_display` の未知の値はエラーにする。v0.1.0 の dots.toml の検証と同じく、打ち間違いをそのまま通さない。
 - `fold_unchanged = false` のときも、`fold_unchanged_keep` の値は検証する。
 - `[general]` は OS ごとに分けない。`[general.linux]` のような書き方は v0.2.0 では設けず、エラーにする。
 
@@ -594,7 +593,7 @@ Repository: ~/dotfiles
   ✓ ~/.config/fish
   ✓ ~/.config/nvim
   … 47 unchanged
-  + ~/.config/wezterm       ← config/wezterm
+  + ~/.config/wezterm  ← config/wezterm
 
 1 created, 49 unchanged
 ```
@@ -607,7 +606,7 @@ Repository: ~/dotfiles
 - `… N unchanged` の行は `✓` のまとまりの最後に置く。2スペースの字下げの後に記号の位置で `…`（U+2026）を出し、空白1つの後に `N unchanged` を続ける。薄い色（dim）で表示する。色なしの場合も同じ文字を出す。
 - `… N unchanged` の行には `←` を付けず、`←` の列揃え（8.3）の計算にも含めない。
 - `fold_unchanged = false` のときは全件を表示し、`fold_unchanged_keep` は使わない。
-- `dots apply --verbose`（`--dry-run` と併用できる）を付けると、設定にかかわらず全件を表示する。apply の `--verbose` は折りたたみを無効にするだけで、`← source` を付ける行（8.3）は変えない。
+- `dots apply --verbose`（`--dry-run` と併用できる）を付けると、設定にかかわらず全件を表示する。apply の `--verbose` は折りたたみを無効にするだけで、`← source` を付ける行（8.3）は変えない。`source_display` も変えない（8.6）。
 - 要約では、apply と apply --dry-run の `already ok` を `unchanged` に変える。件数は、折りたたんだかどうかにかかわらず、変化のなかった項目の全件数とする。
 - すべての項目に変化がない場合も同じ規則で折りたたみ、その後に `Everything is up to date.` を表示する。
 
@@ -621,12 +620,12 @@ Repository: ~/dotfiles
 
 #### やること
 
-- [ ] config に `[general]` の読み込みと検証を加える。トップレベルの未知のキーのエラーメッセージで、使えるキーに `general` を加える。
-- [ ] ui の項目一覧に折りたたみを加える（apply、apply --dry-run）。
-- [ ] apply の要約の `already ok` を `unchanged` に変える。
-- [ ] apply と status で、`✓` のまとまりと他の行の間の空行をなくす（8.1、8.2）。
-- [ ] `dots apply --verbose` を加える。
-- [ ] README の出力例と dots.toml の説明を更新する。
+- [x] config に `[general]` の読み込みと検証を加える。トップレベルの未知のキーのエラーメッセージで、使えるキーに `general` を加える。`source_display` の読み込みと検証も含める（8.6）。
+- [x] ui の項目一覧に折りたたみを加える（apply、apply --dry-run）。
+- [x] apply の要約の `already ok` を `unchanged` に変える。
+- [x] apply と status で、`✓` のまとまりと他の行の間の空行をなくす（8.1、8.2）。
+- [x] `dots apply --verbose` を加える。
+- [x] README の出力例と dots.toml の説明を更新する。
 - [ ] 単体テスト: `[general]` の省略・既定値・型の違い・負の数・未知のキー、U が K 以下・K + 1・K + 2 以上の場合、K = 0、`fold_unchanged = false`、`--verbose`、色なしの出力、`←` の列揃えに `…` の行が影響しないこと。
 
 #### 完了の条件
@@ -635,6 +634,54 @@ Repository: ~/dotfiles
 - `fold_unchanged = false` または `--verbose` で、全件が表示される。
 - apply と apply --dry-run の要約に `already ok` が出ず、`unchanged` が出る。
 - apply と status の出力で、`✓` の行と他の行の間に空行が入らない。
+
+### 8.6 source の表示の設定
+
+#### 設定
+
+`[general]` の `source_display` で、`dots apply` と `dots apply --dry-run` の行に `← source` を付ける範囲を選ぶ。
+
+| 値 | 動作 |
+| --- | --- |
+| `"off"` | `← source` を付けない。 |
+| `"simple"`（既定） | 作成（`+`）と置換（`~`）の行にだけ `← source` を付ける。8.3 の動作である。 |
+| `"verbose"` | source が分かる全項目に `← source  出所` を付ける。`✓` の行と `!` の行も含む。`dots status --verbose`（8.1）と同じ表示である。 |
+
+`"simple"` の例を示す。
+
+```text
+  + ~/.vimrc  ← vimrc
+  + ~/.zshrc  ← zsh/zshrc
+```
+
+`"verbose"` では、同じ行が `← zsh/zshrc  auto[0]` のように、source の後ろに空白2つで出所が付くになる。
+
+- 値が文字列でないとき、`"off"`、`"simple"`、`"verbose"` のどれでもないときは、他の `[general]` のキーと同じくエラーにする。
+- `dots apply --verbose` は `source_display` を変えない。`--verbose` は折りたたみ（8.5）を無効にするだけである。
+- 対象は apply と apply --dry-run である。status は `source_display` に従わず、`--verbose` の有無で決まる（8.1）。clean の行は常に `-` の行にだけ `← source` を付ける（7.4、8.3）。
+- `fold_unchanged` による折りたたみとは独立している。`… N unchanged` の行には `←` を付けない（8.5）。
+
+#### v0.2.0 で決めたこと
+
+- キー名は `source_display` とする。`show_source` のような `show_*` は真偽値に読めるが、この設定は3つの値から選ぶ。名詞句の `source_display` なら表示の方式を選ぶ設定として読める。また、将来 status にも広げる場合でも、名前を変えずに済む。このキー名は Gemini に相談して決めた。
+- 値は `off`、`simple`、`verbose` とする。`verbose` は status の `--verbose` と同じ表示で、2つのコマンドで同じ処理を使う。
+- apply の `--verbose` と `source_display` は結び付けない。`--verbose` は一度だけ全件を見るための指定で、dots.toml の設定を上書きするものではないためである。
+- 既定は `simple` とし、設定を書かない dots.toml では 8.3 の動作を変えない。
+
+#### やること
+
+- [x] config に `source_display` の読み込みと検証を加える。
+- [x] apply と status が同じ表示処理（ui の `SourceMode`）を使うようにし、status --verbose の `←` を揃える。
+- [x] status --verbose から `Overridden rules:` を外す。
+- [x] README の dots.toml の説明を更新する。
+- [ ] 単体テスト: `source_display` の省略・3つの値・未知の値・型の違い、`off` と `verbose` の出力、status --verbose の列揃えと stale の source、色なしの出力。
+
+#### 完了の条件
+
+- `source_display` を書かない dots.toml で、apply は `+` と `~` の行にだけ `← source` を表示する。
+- `"off"` では `← source` が出ない。`"verbose"` では全項目に出所つきで出る。
+- `dots status --verbose` に `Overridden rules:` が出ず、`←` が1つの列にそろう。
+
 
 ## 9. 表示と記号
 

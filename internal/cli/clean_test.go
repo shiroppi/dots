@@ -173,7 +173,7 @@ func TestApplyReportsStale(t *testing.T) {
 	if !strings.Contains(out, "1 stale link(s) found.") || !strings.Contains(out, `Run "dots clean" to remove them.`) {
 		t.Errorf("missing stale notice:\n%s", out)
 	}
-	if strings.Index(out, "already ok") > strings.Index(out, "stale link(s)") {
+	if strings.Index(out, "unchanged") > strings.Index(out, "stale link(s)") {
 		t.Errorf("notice must follow the summary:\n%s", out)
 	}
 	if !te.isLink(p("home", ".b")) || !te.recorded(t, p("home", ".b")) {

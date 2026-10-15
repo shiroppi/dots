@@ -193,11 +193,12 @@ func (a *App) updateState(pr *ui.Printer, store *statefile.Store, st *statefile.
 	return nil
 }
 
-// load finds, parses and resolves dots.toml starting from Cwd.
-func (a *App) load() (*model.Resolution, error) {
+// load finds, parses and resolves dots.toml starting from Cwd. It also
+// returns the [general] settings.
+func (a *App) load() (*model.Resolution, config.General, error) {
 	path, err := config.Find(a.FS, a.Env.Cwd)
 	if err != nil {
-		return nil, a.printer().WrapError(err)
+		return nil, config.General{}, a.printer().WrapError(err)
 	}
 	// From here on the repository root is known, so messages show sources
 	// relative to it.
@@ -205,13 +206,30 @@ func (a *App) load() (*model.Resolution, error) {
 	pr.Root = filepath.Dir(path)
 	cfg, err := config.Load(a.FS, path)
 	if err != nil {
-		return nil, pr.WrapError(err)
+		return nil, config.General{}, pr.WrapError(err)
 	}
 	res, err := resolve.Resolve(a.FS, a.Env, path, cfg)
 	if err != nil {
-		return nil, pr.WrapError(err)
+		return nil, config.General{}, pr.WrapError(err)
 	}
-	return res, nil
+	return res, cfg.General, nil
+}
+
+// applyPrinter is printerFor with the [general] settings of apply: how rows
+// show their source, and the folding of unchanged rows unless verbose.
+func (a *App) applyPrinter(res *model.Resolution, g config.General, verbose bool) *ui.Printer {
+	pr := a.printerFor(res)
+	switch g.SourceDisplay {
+	case config.SourceOff:
+		pr.Source = ui.SourceOff
+	case config.SourceVerbose:
+		pr.Source = ui.SourceVerbose
+	default:
+		pr.Source = ui.SourceSimple
+	}
+	pr.Fold = g.FoldUnchanged && !verbose
+	pr.FoldKeep = g.FoldUnchangedKeep
+	return pr
 }
 
 // usageTemplate renders both the root and the subcommand help: a description,
@@ -347,7 +365,7 @@ func newStatusCmd(app *App) *cobra.Command {
 		GroupID: "core",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := app.load()
+			res, _, err := app.load()
 			if err != nil {
 				return err
 			}
@@ -359,24 +377,24 @@ func newStatusCmd(app *App) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show the source and rule of each row, and overridden rules")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show the source and rule of each row")
 	return cmd
 }
 
 func newApplyCmd(app *App) *cobra.Command {
-	var dryRun bool
+	var dryRun, verbose bool
 	cmd := &cobra.Command{
 		Use:     "apply",
 		Short:   "Apply dotfiles",
 		GroupID: "core",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := app.load()
+			res, general, err := app.load()
 			if err != nil {
 				return err
 			}
 			plan := apply.BuildPlan(app.FS, res)
-			pr := app.printerFor(res)
+			pr := app.applyPrinter(res, general, verbose)
 			if dryRun {
 				pr.Plan(plan)
 				if plan.HasErrors() {
@@ -431,6 +449,7 @@ func newApplyCmd(app *App) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be done without changing anything")
+	cmd.Flags().BoolVar(&verbose, "verbose", false, "Show every unchanged row instead of folding them")
 	return cmd
 }
 
