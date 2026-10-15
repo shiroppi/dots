@@ -21,6 +21,11 @@ A small, declarative dotfiles manager for people who want their configuration to
 ## Configuration
 
 ```toml
+[general]
+source_display = "simple"
+fold_unchanged = true
+fold_unchanged_keep = 5
+
 [dots]
 "~/.vimrc" = "vimrc"
 "~/.config/nvim" = "nvim"
@@ -37,11 +42,6 @@ ignore = ["README.md", ".DS_Store"]
 source = "config/darwin"
 target = "~/.config"
 os_only = true
-
-[general]
-fold_unchanged = true
-fold_unchanged_keep = 5
-source_display = "simple"
 ```
 
 * `dots` — Link individual files or directories.
