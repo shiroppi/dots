@@ -10,7 +10,7 @@
 
 pkgname=dots-bin
 _pkgname=dots
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='A brief, declarative, flexible dotfiles manager (prebuilt binary)'
 arch=('x86_64' 'aarch64' 'armv7h' 'i686' 'riscv64')

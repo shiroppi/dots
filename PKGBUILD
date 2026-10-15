@@ -3,14 +3,14 @@
 # Local development build: packages dots from the source tree this PKGBUILD
 # sits in (including uncommitted changes), not from a release tarball.
 #   makepkg -si
-# The binary is stamped "<version>-<githash>" (e.g. 0.1.0-223c2f0). pkgver
-# cannot contain '-', so the package version uses '_' instead (0.1.0_223c2f0).
+# The binary is stamped "<version>-<githash>" (e.g. 0.2.0-b37a8e1). pkgver
+# cannot contain '-', so the package version uses '_' instead (0.2.0_b37a8e1).
 # <version> is the latest vX.Y.Z tag, or _basever when no tag exists yet.
 # The AUR PKGBUILDs live in docs/aur/.
 
 pkgname=dots
-_basever=0.1.0
-pkgver=0.1.0_223c2f0
+_basever=0.2.0
+pkgver=0.2.0_b37a8e1
 pkgrel=1
 pkgdesc='A brief, declarative, flexible dotfiles manager'
 arch=('x86_64' 'aarch64' 'armv7h' 'i686' 'riscv64')
