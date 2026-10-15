@@ -299,6 +299,11 @@ func TestApply(t *testing.T) {
 		t.Errorf("empty config apply failed: %d, %q", c, te.out.String())
 	}
 
+	te.out.Reset()
+	if c := te.run("apply", "--dry-run"); c != 0 || te.out.String() != "Nothing to do: dots.toml defines no links.\n" {
+		t.Errorf("empty config apply --dry-run failed: %d, %q", c, te.out.String())
+	}
+
 	if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(`[dots]`+"\n"+`"~/.a" = "a"`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

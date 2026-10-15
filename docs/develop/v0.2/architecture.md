@@ -69,6 +69,7 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 | apply の source 表示 | `[general]` の `source_display`（`off`、`simple`、`verbose`）で、apply と apply --dry-run の行に付ける `← source` を切り替える。既定の `simple` は v0.2.0 の 8.3 の動作（8.6） | 新規。既定値では動作は変わらない |
 | apply の要約の語 | `already ok` を `unchanged` に変える（apply、apply --dry-run。8.5） | 表示の変更。出力を解析しているスクリプトには影響する |
 | 項目のまとまりの間の空行 | apply と status で、`✓` の行と他の行の間に入れていた空行をなくす（8.1、8.2） | 表示の変更 |
+| apply --dry-run の空の設定 | dots.toml にリンクが1件もないとき、`apply --dry-run` も `apply` と同じく `Nothing to do: dots.toml defines no links.` の1行だけを表示する（8.2） | 表示の変更 |
 | 新コマンド | clean（7章） | - |
 
 ## 3. CLIコマンド
@@ -389,6 +390,7 @@ Run "dots clean" to remove stale links.
 - stale は削除しない。stale が1件以上あれば、要約の後に件数と `Run "dots clean" to remove them.` を表示する。
 - state の書き込みに失敗しても、作ったリンクは戻さない。警告を表示し、終了コードは1とする。
 - 項目の行は `✓` → `+` → `~` → `!` の順にまとめて表示する。まとまりの間に空行は入れない。同じ記号の中では元の順序を保ち、`backup:` などの補足行は各項目の直下に置く。`--dry-run` の計画も同じ順にする。
+- dots.toml にリンクが1件もないときは、`--dry-run` の有無にかかわらず `Nothing to do: dots.toml defines no links.` の1行だけを表示し、終了コード0で終わる。
 - 変化のなかった項目（`✓`）が多い場合は折りたたむ。要約の `already ok` は `unchanged` に変える（8.5）。
 
 ### 8.3 変更した項目の source を表示する（#9）

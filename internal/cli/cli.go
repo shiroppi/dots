@@ -395,15 +395,15 @@ func newApplyCmd(app *App) *cobra.Command {
 			}
 			plan := apply.BuildPlan(app.FS, res)
 			pr := app.applyPrinter(res, general, verbose)
+			if len(plan.Items) == 0 {
+				fmt.Fprintln(app.Stdout, "Nothing to do: dots.toml defines no links.")
+				return nil
+			}
 			if dryRun {
 				pr.Plan(plan)
 				if plan.HasErrors() {
 					return silentError{}
 				}
-				return nil
-			}
-			if len(plan.Items) == 0 {
-				fmt.Fprintln(app.Stdout, "Nothing to do: dots.toml defines no links.")
 				return nil
 			}
 			// State problems must surface before any link changes.
