@@ -185,8 +185,11 @@ func TestInit(t *testing.T) {
 		t.Errorf("content mismatch")
 	}
 	cfg, err := config.Parse(content)
-	if err != nil || len(cfg.Dots) != 0 || len(cfg.Auto) != 0 {
+	if err != nil || len(cfg.Dots) != 0 || len(cfg.DotsOS) != 0 || len(cfg.Auto) != 0 {
 		t.Errorf("expected 0 rules, got err=%v cfg=%+v", err, cfg)
+	}
+	if cfg.General != config.DefaultGeneral {
+		t.Errorf("General = %+v, want defaults %+v", cfg.General, config.DefaultGeneral)
 	}
 	code2 := te.run("init")
 	if code2 != 1 {

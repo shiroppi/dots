@@ -296,8 +296,8 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 	return root
 }
 
-// InitTemplate is the content written by `dots init`; it parses to an empty
-// configuration.
+// InitTemplate is the content written by `dots init`; it defines no links
+// and sets [general] to its default values.
 const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 #
 # [dots] maps a target path to a source path (relative to this file).
@@ -324,6 +324,13 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 #   [[auto.linux]]
 #   source = "linux-config"
 #   target = "~/.config"
+
+# [general] tunes the output of dots apply. The values below are the defaults.
+
+[general]
+source_display = "simple"   # off | simple | verbose
+fold_unchanged = true       # fold unchanged rows into "… N unchanged"
+fold_unchanged_keep = 5     # unchanged rows kept visible when folding
 
 [dots]
 `
