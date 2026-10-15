@@ -102,7 +102,7 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    ```
 2. Edit the newly created `dots.toml` to define your environment and links referring to [Configuration](#configuration):
    ```bash
-   $EDITOR dots.toml
+   vim dots.toml
    ```
 3. Apply the configuration (creates symlinks):
    ```bash
@@ -119,12 +119,6 @@ go install github.com/shiroppi/dots/cmd/dots@latest
 
    2 created, 49 unchanged
    ```
-   `dots apply --verbose` lists every unchanged row instead of folding them (it does not change `source_display`).
-4. Check the state at any time:
-   ```bash
-   dots status
-   ```
-   `dots status --verbose` also shows the source and the rule of each row (`← nvim  dots."~/.config/nvim"`). It does not list overridden rules; `dots apply --dry-run` does.
 
 <!-- ### Stale links -->
 <!---->
