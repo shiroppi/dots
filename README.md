@@ -16,9 +16,8 @@ A small, declarative dotfiles manager for people who want their configuration li
 - Brief, declarative configuration
 - User-defined dotfiles structure
 - Cross-platform support (Windows, macOS, Linux, FreeBSD, OpenBSD)
-(Although other operating systems supported by [GOOS](https://pkg.go.dev/internal/platform#pkg-variables), except for AIX, iOS, JavaScript, WASI and Plan9 have not been tested with unit and e2e tests, they are expected to work in most cases.)
 
-<small>dots supports all operating systems listed in [GOOS](https://pkg.go.dev/internal/platform#pkg-variables) for running itself, as defined in [config.go](https://github.com/shiroppi/dots/blob/dev/internal/config/config.go#L113-L118)</small>
+Although other operating systems supported by [GOOS](https://pkg.go.dev/internal/platform#pkg-variables), except for AIX, iOS, JavaScript, WASI and Plan9 have not been tested with unit and e2e tests, they are expected to work in most cases, as defined in [config.go](https://github.com/shiroppi/dots/blob/dev/internal/config/config.go#L113-L118).
 
 ## Configuration
 
