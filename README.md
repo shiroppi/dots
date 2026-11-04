@@ -14,9 +14,11 @@ A small, declarative dotfiles manager for people who want their configuration to
 ## Features
 
 - Brief, declarative configuration
-- Flexible dotfiles structure
+- User-defined dotfiles structure
 - Cross-platform support (Windows, macOS, Linux, FreeBSD, OpenBSD)
-- Beautiful, modern CLI UX
+(Although other operating systems, except for AIX, iOS, JavaScript, WASI and Plan9 supported by [GOOS](https://pkg.go.dev/internal/platform#pkg-variables) have not been tested with unit and e2e tests, they are expected to work in most cases.)
+
+<small>dots supports all operating systems listed in GOOS for running itself, as defined in [config.go](https://github.com/shiroppi/dots/blob/dev/internal/config/config.go#L113-L118)</small>
 
 ## Configuration
 
@@ -141,4 +143,4 @@ go install github.com/shiroppi/dots/cmd/dots@latest
 <!-- * Moving the repository to another path loses the detection of records made before the move. -->
 
 > [!IMPORTANT]
-> On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the `SeCreateSymbolicLinkPrivilege` (usually Administrator).
+> On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the permission, `SeCreateSymbolicLinkPrivilege`.
