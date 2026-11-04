@@ -3,7 +3,7 @@
     <h1>dots</h1>
 </div>
 
-> A brief, declarative, used-defined dotfiles manager.
+> A brief, declarative, user-defined dotfiles manager.
 
 Your dotfiles, your environment.
 
