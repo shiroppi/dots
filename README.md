@@ -7,7 +7,7 @@
 
 Your dotfiles, your environment.
 
-A small, declarative dotfiles manager for people who want their configuration to remain itself.
+A small, declarative dotfiles manager for people who want their configuration like directory structure to remain itself.
 
 <img width="631" height="302" alt="image" src="https://github.com/user-attachments/assets/0ca23527-3514-472f-8124-54c54d4c527e" />
 
