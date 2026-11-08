@@ -74,13 +74,13 @@ func TestFoldPlanThresholds(t *testing.T) {
 		wantFold bool
 		wantN    int
 	}{
-		{"U < K+1 (U=3, K=5)", 3, 5, false, 0},
-		{"U == K (U=5, K=5)", 5, 5, false, 0},
-		{"U == K+1 (U=6, K=5)", 6, 5, false, 0},
-		{"U == K+2 (U=7, K=5)", 7, 5, true, 2},
-		{"U > K+2 (U=10, K=5)", 10, 5, true, 5},
-		{"K=2, U=3 (U==K+1)", 3, 2, false, 0},
-		{"K=2, U=4 (U>K+1)", 4, 2, true, 2},
+		{"U < K (U=1, K=2)", 1, 2, false, 0},
+		{"U == K (U=2, K=2)", 2, 2, false, 0},
+		{"U == K+1 (U=3, K=2)", 3, 2, false, 0},
+		{"U == K+2 (U=4, K=2)", 4, 2, true, 2},
+		{"U > K+2 (U=7, K=2)", 7, 2, true, 5},
+		{"K=5, U=6 (U==K+1)", 6, 5, false, 0},
+		{"K=5, U=7 (U>K+1)", 7, 5, true, 2},
 	}
 
 	for _, tc := range tests {
@@ -151,9 +151,9 @@ func TestFoldReportThresholds(t *testing.T) {
 		wantFold bool
 		wantN    int
 	}{
-		{"Report U == K+1 (U=6, K=5)", 6, 5, false, 0},
-		{"Report U == K+2 (U=7, K=5)", 7, 5, true, 2},
-		{"Report U > K+2 (U=10, K=5)", 10, 5, true, 5},
+		{"Report U == K+1 (U=3, K=2)", 3, 2, false, 0},
+		{"Report U == K+2 (U=4, K=2)", 4, 2, true, 2},
+		{"Report U > K+2 (U=7, K=2)", 7, 2, true, 5},
 	}
 
 	for _, tc := range tests {
@@ -308,15 +308,15 @@ func TestFoldSummaryAllUnchanged(t *testing.T) {
 	}
 	outPlanChange := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
+		pr.FoldKeep = 2
 		pr.Plan(planWithChange)
 	})
 	checkContains(t, outPlanChange, "1 to create, 7 unchanged")
 	if strings.Contains(outPlanChange, "already ok") {
 		t.Errorf("Plan summary must not contain 'already ok':\n%s", outPlanChange)
 	}
-	if strings.Contains(outPlanChange, "5 unchanged") {
-		t.Errorf("Plan summary must count all 7 unchanged rows, not 5:\n%s", outPlanChange)
+	if strings.Contains(outPlanChange, "2 unchanged") {
+		t.Errorf("Plan summary must count all 7 unchanged rows, not 2:\n%s", outPlanChange)
 	}
 
 	repWithChange := &apply.Report{
@@ -327,44 +327,48 @@ func TestFoldSummaryAllUnchanged(t *testing.T) {
 	}
 	outRepChange := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
+		pr.FoldKeep = 2
 		pr.Report(repWithChange)
 	})
 	checkContains(t, outRepChange, "1 created, 7 unchanged")
 	if strings.Contains(outRepChange, "already ok") {
 		t.Errorf("Report summary must not contain 'already ok':\n%s", outRepChange)
 	}
-	if strings.Contains(outRepChange, "5 unchanged") {
-		t.Errorf("Report summary must count all 7 unchanged rows, not 5:\n%s", outRepChange)
+	if strings.Contains(outRepChange, "2 unchanged") {
+		t.Errorf("Report summary must count all 7 unchanged rows, not 2:\n%s", outRepChange)
 	}
 
 	// All rows unchanged: still folded, then "Everything is up to date."
 	planAllOK := &apply.Plan{Items: makeOKPlanItems(7)}
 	outPlanAllOK := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
+		pr.FoldKeep = 2
 		pr.Plan(planAllOK)
 	})
-	checkContains(t, outPlanAllOK, "  … 2 unchanged", "Everything is up to date.")
-	for i := 0; i < 5; i++ {
+	checkContains(t, outPlanAllOK, "  … 5 unchanged", "Everything is up to date.")
+	for i := 0; i < 2; i++ {
 		checkContains(t, outPlanAllOK, "✓ "+p("home", fmt.Sprintf("ok%d", i)))
 	}
-	if strings.Contains(outPlanAllOK, "✓ "+p("home", "ok5")) || strings.Contains(outPlanAllOK, "✓ "+p("home", "ok6")) {
-		t.Errorf("folded ok rows must not appear as ✓ in Plan:\n%s", outPlanAllOK)
+	for i := 2; i < 7; i++ {
+		if strings.Contains(outPlanAllOK, "✓ "+p("home", fmt.Sprintf("ok%d", i))) {
+			t.Errorf("folded ok rows must not appear as ✓ in Plan:\n%s", outPlanAllOK)
+		}
 	}
 
 	repAllOK := &apply.Report{Items: makeOKReportItems(7)}
 	outRepAllOK := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
+		pr.FoldKeep = 2
 		pr.Report(repAllOK)
 	})
-	checkContains(t, outRepAllOK, "  … 2 unchanged", "Everything is up to date.")
-	for i := 0; i < 5; i++ {
+	checkContains(t, outRepAllOK, "  … 5 unchanged", "Everything is up to date.")
+	for i := 0; i < 2; i++ {
 		checkContains(t, outRepAllOK, "✓ "+p("home", fmt.Sprintf("ok%d", i)))
 	}
-	if strings.Contains(outRepAllOK, "✓ "+p("home", "ok5")) || strings.Contains(outRepAllOK, "✓ "+p("home", "ok6")) {
-		t.Errorf("folded ok rows must not appear as ✓ in Report:\n%s", outRepAllOK)
+	for i := 2; i < 7; i++ {
+		if strings.Contains(outRepAllOK, "✓ "+p("home", fmt.Sprintf("ok%d", i))) {
+			t.Errorf("folded ok rows must not appear as ✓ in Report:\n%s", outRepAllOK)
+		}
 	}
 }
 
@@ -378,14 +382,12 @@ func TestFoldArrowAlignment(t *testing.T) {
 
 	outFolded := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
-		pr.Source = SourceSimple
+		pr.FoldKeep = 2
 		pr.Plan(plan)
 	})
 	outUnfolded := render(func(pr *Printer) {
 		pr.Fold = false
-		pr.FoldKeep = 5
-		pr.Source = SourceSimple
+		pr.FoldKeep = 2
 		pr.Plan(plan)
 	})
 
@@ -431,11 +433,11 @@ func TestFoldColor(t *testing.T) {
 	// Without Color: no escape sequences
 	outPlain := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
+		pr.FoldKeep = 2
 		pr.Color = false
 		pr.Plan(plan)
 	})
-	checkContains(t, outPlain, "  … 2 unchanged")
+	checkContains(t, outPlain, "  … 5 unchanged")
 	if strings.Contains(outPlain, "\x1b[") {
 		t.Errorf("plain output must not have ANSI escapes, got:\n%s", outPlain)
 	}
@@ -443,11 +445,11 @@ func TestFoldColor(t *testing.T) {
 	// With Color: fold line is dim ("\x1b[2m")
 	outColor := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 5
+		pr.FoldKeep = 2
 		pr.Color = true
 		pr.Plan(plan)
 	})
-	checkContains(t, outColor, "\x1b[2m… 2 unchanged\x1b[0m")
+	checkContains(t, outColor, "\x1b[2m… 5 unchanged\x1b[0m")
 }
 
 func TestFoldNoBlankLine(t *testing.T) {
@@ -464,7 +466,7 @@ func TestFoldNoBlankLine(t *testing.T) {
 	t.Run("Plan folded", func(t *testing.T) {
 		out := render(func(pr *Printer) {
 			pr.Fold = true
-			pr.FoldKeep = 5
+			pr.FoldKeep = 2
 			pr.Plan(plan)
 		})
 		checkNoBlankLinesInItems(t, out)
@@ -489,7 +491,7 @@ func TestFoldNoBlankLine(t *testing.T) {
 	t.Run("Report folded", func(t *testing.T) {
 		out := render(func(pr *Printer) {
 			pr.Fold = true
-			pr.FoldKeep = 5
+			pr.FoldKeep = 2
 			pr.Report(rep)
 		})
 		checkNoBlankLinesInItems(t, out)
@@ -504,7 +506,7 @@ func TestFoldNoBlankLine(t *testing.T) {
 	})
 }
 
-func TestSourceModes(t *testing.T) {
+func TestApplySourceSimple(t *testing.T) {
 	plan := &apply.Plan{
 		Items: []apply.Item{
 			item("ok_item", state.ValidLink, apply.ActionSkip, nil),
@@ -521,79 +523,30 @@ func TestSourceModes(t *testing.T) {
 		},
 	}
 
-	// 1. SourceSimple: "← source" only on + and ~ rows.
-	t.Run("Plan SourceSimple", func(t *testing.T) {
+	t.Run("Plan", func(t *testing.T) {
 		out := render(func(pr *Printer) {
-			pr.Source = SourceSimple
 			pr.Plan(plan)
 		})
 		checkContains(t, out, "← "+p("src", "create_item"), "← "+p("src", "replace_item"))
 		if strings.Contains(out, p("src", "ok_item")) {
-			t.Errorf("SourceSimple must not show source for ok rows:\n%s", out)
+			t.Errorf("Plan must not show source for ok rows:\n%s", out)
 		}
 		if strings.Contains(out, `dots."create_item"`) || strings.Contains(out, `dots."replace_item"`) {
-			t.Errorf("SourceSimple must not show origin rule:\n%s", out)
+			t.Errorf("Plan must not show origin rule:\n%s", out)
 		}
 	})
 
-	t.Run("Report SourceSimple", func(t *testing.T) {
+	t.Run("Report", func(t *testing.T) {
 		out := render(func(pr *Printer) {
-			pr.Source = SourceSimple
 			pr.Report(rep)
 		})
 		checkContains(t, out, "← "+p("src", "create_item"), "← "+p("src", "replace_item"))
 		if strings.Contains(out, p("src", "ok_item")) {
-			t.Errorf("SourceSimple must not show source for AlreadyOK rows in Report:\n%s", out)
+			t.Errorf("Report must not show source for AlreadyOK rows:\n%s", out)
 		}
 		if strings.Contains(out, `dots."create_item"`) || strings.Contains(out, `dots."replace_item"`) {
-			t.Errorf("SourceSimple must not show origin rule in Report:\n%s", out)
+			t.Errorf("Report must not show origin rule:\n%s", out)
 		}
-	})
-
-	// 2. SourceOff: no "←" anywhere.
-	t.Run("Plan SourceOff", func(t *testing.T) {
-		out := render(func(pr *Printer) {
-			pr.Source = SourceOff
-			pr.Plan(plan)
-		})
-		if strings.Contains(out, "←") {
-			t.Errorf("SourceOff must show no '←' in Plan:\n%s", out)
-		}
-	})
-
-	t.Run("Report SourceOff", func(t *testing.T) {
-		out := render(func(pr *Printer) {
-			pr.Source = SourceOff
-			pr.Report(rep)
-		})
-		if strings.Contains(out, "←") {
-			t.Errorf("SourceOff must show no '←' in Report:\n%s", out)
-		}
-	})
-
-	// 3. SourceVerbose: every row with a source gets `← <source>  dots."<name>"`, ✓ rows included.
-	t.Run("Plan SourceVerbose", func(t *testing.T) {
-		out := render(func(pr *Printer) {
-			pr.Source = SourceVerbose
-			pr.Plan(plan)
-		})
-		checkContains(t, out,
-			"← "+p("src", "ok_item")+`  dots."ok_item"`,
-			"← "+p("src", "create_item")+`  dots."create_item"`,
-			"← "+p("src", "replace_item")+`  dots."replace_item"`,
-		)
-	})
-
-	t.Run("Report SourceVerbose", func(t *testing.T) {
-		out := render(func(pr *Printer) {
-			pr.Source = SourceVerbose
-			pr.Report(rep)
-		})
-		checkContains(t, out,
-			"← "+p("src", "ok_item")+`  dots."ok_item"`,
-			"← "+p("src", "create_item")+`  dots."create_item"`,
-			"← "+p("src", "replace_item")+`  dots."replace_item"`,
-		)
 	})
 }
 

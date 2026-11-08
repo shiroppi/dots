@@ -215,18 +215,10 @@ func (a *App) load() (*model.Resolution, config.General, error) {
 	return res, cfg.General, nil
 }
 
-// applyPrinter is printerFor with the [general] settings of apply: how rows
-// show their source, and the folding of unchanged rows unless verbose.
+// applyPrinter is printerFor with the [general] settings of apply: the
+// folding of unchanged rows unless verbose.
 func (a *App) applyPrinter(res *model.Resolution, g config.General, verbose bool) *ui.Printer {
 	pr := a.printerFor(res)
-	switch g.SourceDisplay {
-	case config.SourceOff:
-		pr.Source = ui.SourceOff
-	case config.SourceVerbose:
-		pr.Source = ui.SourceVerbose
-	default:
-		pr.Source = ui.SourceSimple
-	}
 	pr.Fold = g.FoldUnchanged && !verbose
 	pr.FoldKeep = g.FoldUnchangedKeep
 	return pr
@@ -328,9 +320,8 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 # [general] tunes the output of dots apply. The values below are the defaults.
 
 [general]
-source_display = "simple"   # off | simple | verbose
 fold_unchanged = true       # fold unchanged rows into "… N unchanged"
-fold_unchanged_keep = 5     # unchanged rows kept visible when folding
+fold_unchanged_keep = 2     # unchanged rows kept visible when folding
 
 [dots]
 `

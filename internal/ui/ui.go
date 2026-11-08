@@ -24,9 +24,6 @@ type Printer struct {
 	Home  string // when non-empty, paths under Home are shown as ~/... (display only)
 	Root  string // repository root (absolute); when set, sources under it are shown relative to it
 	Width int    // terminal width in columns; 0 when unknown (arrows are then always aligned)
-	// Source is how the apply plan and report show sources (spec §8.3);
-	// status and clean choose their own.
-	Source SourceMode
 	// Fold folds the unchanged rows of the apply plan and report, keeping
 	// the first FoldKeep of them (spec §8.5).
 	Fold     bool
@@ -360,10 +357,10 @@ func (p *Printer) StatusState(plan *apply.Plan, sr StateReport, verbose bool) (o
 	return ok
 }
 
-// applyList is the grouped listing of the apply plan and report: sources as
-// p.Source says, unchanged rows folded when p.Fold is set.
+// applyList is the grouped listing of the apply plan and report: unchanged
+// rows are folded when p.Fold is set.
 func (p *Printer) applyList() *itemList {
-	l := p.newList(p.Source)
+	l := p.newList(SourceSimple)
 	l.grouped = true
 	if p.Fold {
 		l.foldKeep = p.FoldKeep
