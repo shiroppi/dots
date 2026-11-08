@@ -1,4 +1,4 @@
-Happy path: overrides, ignore patterns, os_only, two auto rules. Empty home.
+Happy path: overrides, ignore patterns, auto.<os> exclusion, two auto rules. Empty home.
 
 Try:
   dots status            exit 1: every target is missing (×)

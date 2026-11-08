@@ -49,11 +49,11 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 	flat(cfg.DotsOS[env.GOOS], model.LayerDotsOS, "dots."+env.GOOS)
 
 	// Auto notation.
-	osOnly := osOnlySources(cfg)
+	osSources := autoOSSources(cfg)
 	for _, g := range cfg.Auto {
 		if g.Common != nil {
 			rule := fmt.Sprintf("auto[%d]", g.Index)
-			excl, nestedErrs := osOnlyExclusions(env.GOOS, rule, g.Common, osOnly)
+			excl, nestedErrs := autoOSExclusions(env.GOOS, rule, g.Common, osSources)
 			errs = append(errs, nestedErrs...)
 			c, e := expand(fsys, env, root, rule, model.LayerAuto, g.Common, excl)
 			cands = append(cands, c...)
@@ -155,22 +155,20 @@ func Resolve(fsys fs.Manager, env platform.Env, configPath string, cfg *config.C
 	return &model.Resolution{ConfigPath: configPath, Root: root, Entries: winners, Overrides: overrides}, nil
 }
 
-// osOnlySource is the source of one os_only rule and its locator.
-type osOnlySource struct {
+// autoOSSource is the source of one auto.<os> rule and its locator.
+type autoOSSource struct {
 	source string
 	rule   string // e.g. auto[1].darwin[0]
 }
 
-// osOnlySources returns the os_only rules of every auto.<os> table, including
-// OSes other than the running one, in a deterministic order.
-func osOnlySources(cfg *config.Config) []osOnlySource {
-	var out []osOnlySource
+// autoOSSources returns the rules of every auto.<os> table, including OSes
+// other than the running one, in a deterministic order.
+func autoOSSources(cfg *config.Config) []autoOSSource {
+	var out []autoOSSource
 	for _, g := range cfg.Auto {
 		for goos, rules := range g.OS {
 			for j, r := range rules {
-				if r.OSOnly {
-					out = append(out, osOnlySource{source: r.Source, rule: fmt.Sprintf("auto[%d].%s[%d]", g.Index, goos, j)})
-				}
+				out = append(out, autoOSSource{source: r.Source, rule: fmt.Sprintf("auto[%d].%s[%d]", g.Index, goos, j)})
 			}
 		}
 	}
@@ -178,24 +176,24 @@ func osOnlySources(cfg *config.Config) []osOnlySource {
 	return out
 }
 
-// exclusions lists what os_only rules remove from one common auto rule.
+// exclusions lists what auto.<os> rules remove from one common auto rule.
 type exclusions struct {
-	all   bool            // an os_only source equals the common source
+	all   bool            // an auto.<os> source equals the common source
 	names map[string]bool // normalised first-level names excluded
 }
 
-// osOnlyExclusions computes the first-level items of the common rule that the
-// os_only sources exclude (spec §5.2.1). An os_only source nested two or more
-// levels below the common source is a configuration error unless the
-// first-level item containing it is already excluded by another os_only rule
-// or by the common rule's ignore. No file system access or symlink
-// resolution takes place.
-func osOnlyExclusions(goos, rule string, common *config.AutoRule, sources []osOnlySource) (*exclusions, []error) {
+// autoOSExclusions computes the first-level items of the common rule that the
+// auto.<os> sources exclude (spec §5.2.1, v0.2 §8.7). An auto.<os> source
+// nested two or more levels below the common source is a configuration error
+// unless the first-level item containing it is already excluded by another
+// auto.<os> rule or by the common rule's ignore. No file system access or
+// symlink resolution takes place.
+func autoOSExclusions(goos, rule string, common *config.AutoRule, sources []autoOSSource) (*exclusions, []error) {
 	ex := &exclusions{names: map[string]bool{}}
 	depth := len(strings.Split(common.Source, "/"))
 	type nested struct {
 		first string // first-level name below the common source
-		src   osOnlySource
+		src   autoOSSource
 	}
 	var deep []nested
 	for _, s := range sources {
@@ -216,8 +214,8 @@ func osOnlyExclusions(goos, rule string, common *config.AutoRule, sources []osOn
 		if ex.all || ex.names[nameKey(goos, d.first)] || common.Ignore.Match(d.first) {
 			continue
 		}
-		errs = append(errs, fmt.Errorf("%s: os_only source %s is nested more than one level below %s source %s; auto links only the first level, so %s/%s would still be linked on every OS (point os_only at %s/%s or ignore %q in %s)",
-			d.src.rule, d.src.source, rule, common.Source, common.Source, d.first, common.Source, d.first, d.first, rule))
+		errs = append(errs, fmt.Errorf("%s: source %s is nested more than one level below %s source %s; auto links only the first level, so %s/%s would still be linked on every OS (point %s at %s/%s or ignore %q in %s)",
+			d.src.rule, d.src.source, rule, common.Source, common.Source, d.first, d.src.rule, common.Source, d.first, d.first, rule))
 	}
 	return ex, errs
 }
@@ -241,7 +239,7 @@ func joinRules(r []string) string {
 }
 
 // expand links every first-level item of one auto rule's source directory
-// (spec §5.3). ex lists the items removed by os_only rules (nil for none).
+// (spec §5.3). ex lists the items removed by auto.<os> rules (nil for none).
 func expand(fsys fs.Manager, env platform.Env, root, rule string, layer model.Layer, r *config.AutoRule, ex *exclusions) ([]model.Entry, []error) {
 	sourceRoot := pathx.ResolveSource(root, r.Source)
 	targetRoot, err := r.Target.Resolve(root, env.Home)

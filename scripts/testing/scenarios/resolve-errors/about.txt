@@ -14,6 +14,6 @@ Expect:
   - ~/.config/nvim/lua inside ~/.config/nvim (only reported if nvim resolves;
     remove auto[1] and auto[2] to see it)
   - "~" and "." cannot be links
-  - os_only source nested too deep (auto[3].linux[0])
+  - auto.<os> source nested too deep (auto[3].linux[0])
   - auto source missing / a file
   - broken symlink, symlink loop and FIFO inside an auto source

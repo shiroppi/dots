@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestOSOnlyReadmeExample(t *testing.T) {
+func TestAutoOSExcludeReadmeExample(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -21,7 +21,6 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/darwin"
 target = "~/.config"
-os_only = true
 `
 
 	// For darwin
@@ -44,8 +43,11 @@ os_only = true
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
 
-	// Without os_only
-	tomlNoOSOnly := `
+	// Exception: also linking ~/.config/darwin itself via [dots]
+	tomlWithDots := `
+[dots]
+"~/.config/darwin" = "config/darwin"
+
 [[auto]]
 source = "config"
 target = "~/.config"
@@ -54,16 +56,16 @@ target = "~/.config"
 source = "config/darwin"
 target = "~/.config"
 `
-	res, err = run(t, m, "darwin", tomlNoOSOnly)
+	res, err = run(t, m, "darwin", tomlWithDots)
 	must(t, err)
 	eq(t, summary(res), []string{
-		`home/.config/darwin<-config/darwin[auto[0]]`,
+		`home/.config/darwin<-config/darwin[dots."~/.config/darwin"]`,
 		`home/.config/karabiner<-config/darwin/karabiner[auto[0].darwin[0]]`,
 		`home/.config/starship.toml<-config/starship.toml[auto[0]]`,
 	})
 }
 
-func TestOSOnlyInactiveOSExcludes(t *testing.T) {
+func TestAutoOSExcludeInactiveOS(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -78,7 +80,6 @@ target = "~/.config"
 [[auto.windows]]
 source = "config/windows"
 target = "~/.config"
-os_only = true
 `
 	res, err := run(t, m, "linux", toml)
 	must(t, err)
@@ -92,7 +93,7 @@ os_only = true
 	})
 }
 
-func TestOSOnlyOutsideCommonSource(t *testing.T) {
+func TestAutoOSExcludeOutsideCommonSource(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -107,7 +108,6 @@ target = "~/.config"
 [[auto.darwin]]
 source = "other/darwin"
 target = "~/.config"
-os_only = true
 `
 	res, err := run(t, m, "linux", toml)
 	must(t, err)
@@ -121,7 +121,7 @@ os_only = true
 	})
 }
 
-func TestOSOnlyOverlapping(t *testing.T) {
+func TestAutoOSExcludeOverlapping(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -137,12 +137,10 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/darwin"
 target = "~/.config"
-os_only = true
 
 [[auto.windows]]
 source = "config/darwin/karabiner"
 target = "~/.config"
-os_only = true
 `
 	res, err := run(t, m, "linux", toml)
 	must(t, err)
@@ -156,7 +154,7 @@ os_only = true
 	})
 }
 
-func TestOSOnlyEqualToCommon(t *testing.T) {
+func TestAutoOSExcludeEqualToCommon(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/darwin/karabiner.json",
@@ -170,7 +168,6 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/darwin"
 target = "~/.config"
-os_only = true
 `
 	// The common rule contributes nothing on every OS; that is not an error.
 	for _, goos := range []string{"linux", "openbsd"} {
@@ -180,13 +177,13 @@ os_only = true
 			t.Fatalf("%s: expected no entries, got: %v", goos, summary(res))
 		}
 	}
-	// On darwin the os_only rule itself still applies.
+	// On darwin the auto.darwin rule itself still applies.
 	res, err := run(t, m, "darwin", toml)
 	must(t, err)
 	eq(t, summary(res), []string{`home/.config/karabiner.json<-config/darwin/karabiner.json[auto[0].darwin[0]]`})
 }
 
-func TestOSOnlyDirectChildOnlyThatItemExcluded(t *testing.T) {
+func TestAutoOSExcludeDirectChild(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -202,7 +199,6 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/os"
 target = "~/.config"
-os_only = true
 `
 	// config/os is a direct child of the common source: only it is excluded.
 	for _, goos := range []string{"linux", "openbsd"} {
@@ -212,7 +208,7 @@ os_only = true
 	}
 }
 
-func TestOSOnlyNestedCovered(t *testing.T) {
+func TestAutoOSExcludeNestedCovered(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -222,7 +218,7 @@ func TestOSOnlyNestedCovered(t *testing.T) {
 	})
 	want := []string{`home/.config/starship.toml<-config/starship.toml[auto[0]]`}
 
-	// Covered by an os_only rule on the first-level item itself.
+	// Covered by an auto.<os> rule on the first-level item itself.
 	covered := `
 [[auto]]
 source = "config"
@@ -231,12 +227,10 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/os/darwin"
 target = "~/.config"
-os_only = true
 
 [[auto.linux]]
 source = "config/os"
 target = "~/.config"
-os_only = true
 `
 	for _, goos := range []string{"linux", "openbsd"} {
 		res, err := run(t, m, goos, covered)
@@ -256,13 +250,12 @@ ignore = ["os"]
 [[auto.darwin]]
 source = "config/os/darwin"
 target = "~/.config"
-os_only = true
 `
 	res, err := run(t, m, "openbsd", ignored)
 	must(t, err)
 	eq(t, summary(res), want)
 
-	// Covered by a different os_only rule whose source equals the common source
+	// Covered by a different auto.<os> rule whose source equals the common source
 	// makes the common rule empty.
 	whole := `
 [[auto]]
@@ -272,19 +265,17 @@ target = "~/.config"
 [[auto.linux]]
 source = "config"
 target = "~/.config"
-os_only = true
 
 [[auto.darwin]]
 source = "config/os/darwin"
 target = "~/.config"
-os_only = true
 `
 	if _, err := run(t, m, "openbsd", whole); err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}
 }
 
-func TestOSOnlyNestedUncovered(t *testing.T) {
+func TestAutoOSExcludeNestedUncovered(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -302,7 +293,6 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/os/darwin"
 target = "~/.config"
-os_only = true
 `
 	// A configuration error regardless of the running OS.
 	for _, goos := range []string{"linux", "darwin", "openbsd"} {
@@ -315,10 +305,13 @@ os_only = true
 				t.Errorf("%s: %q lacks %q", goos, err, w)
 			}
 		}
+		if strings.Contains(err.Error(), "os_only") {
+			t.Errorf("%s: error must not mention os_only: %q", goos, err)
+		}
 	}
 }
 
-func TestOSOnlyNestedCaseInsensitive(t *testing.T) {
+func TestAutoOSExcludeNestedCaseInsensitive(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/starship.toml",
@@ -333,12 +326,10 @@ target = "~/.config"
 [[auto.windows]]
 source = "config/Os"
 target = "~/.config"
-os_only = true
 
 [[auto.freebsd]]
 source = "config/os/darwin"
 target = "~/.config"
-os_only = true
 `
 	// Folded on darwin/windows: config/Os covers config/os/darwin.
 	res, err := run(t, m, "darwin", toml)
@@ -350,7 +341,7 @@ os_only = true
 	}
 }
 
-func TestOSOnlyDotsInsideResolves(t *testing.T) {
+func TestAutoOSExcludeDotsInsideResolves(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/darwin/karabiner.json",
@@ -368,7 +359,6 @@ target = "~/.config"
 [[auto.darwin]]
 source = "config/darwin"
 target = "~/.config"
-os_only = true
 `
 	res, err := run(t, m, "linux", toml)
 	must(t, err)
@@ -384,7 +374,7 @@ os_only = true
 	})
 }
 
-func TestOSOnlyCaseInsensitive(t *testing.T) {
+func TestAutoOSExcludeCaseInsensitive(t *testing.T) {
 	m := build(t, tree{
 		files: []string{
 			"config/darwin/karabiner.json",
@@ -399,9 +389,8 @@ target = "~/.config"
 [[auto.windows]]
 source = "config/Darwin"
 target = "~/.config"
-os_only = true
 `
-	// Running on darwin: memfs is case-sensitive, but os_only matching folds case.
+	// Running on darwin: memfs is case-sensitive, but auto.<os> matching folds case.
 	// We use auto.windows to avoid expanding the missing "config/Darwin" dir on memfs.
 	res, err := run(t, m, "darwin", toml)
 	must(t, err)
@@ -410,7 +399,7 @@ os_only = true
 	})
 }
 
-func TestOSOnlyBaseTargetExcluded(t *testing.T) {
+func TestAutoOSExcludeBaseTarget(t *testing.T) {
 	m := build(t, tree{
 		files: []string{"home/f"},
 	})
@@ -422,7 +411,6 @@ target = "~"
 [[auto.darwin]]
 source = "home"
 target = "~/.config"
-os_only = true
 `
 	// On linux, common is excluded, yielding no entries. auto.darwin doesn't run.
 	res, err := run(t, m, "linux", toml)

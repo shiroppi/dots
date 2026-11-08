@@ -28,11 +28,11 @@ Every run rebuilds dots and starts from a clean state, so after changing the cod
 
 | Name | What it covers |
 | --- | --- |
-| basic | Happy path. Four rules producing one target (overrides), every kind of ignore pattern (exact name, `*` as prefix, suffix and in the middle, case sensitivity), os_only, a second auto rule, a name with a space, a hidden item, and a target inside the repository |
+| basic | Happy path. Four rules producing one target (overrides), every kind of ignore pattern (exact name, `*` as prefix, suffix and in the middle, case sensitivity), `auto.<os>` exclusion, a second auto rule, a name with a space, a hidden item, and a target inside the repository |
 | conflicts | The basic repository with existing items in the fake home: a regular file, a directory, a symlink to elsewhere, a broken symlink, an old link from an overridden rule (six conflicts), and one correct link. For the confirm prompt (Yes/No and "Process the rest"), backups and restore |
 | syntax-error | A TOML syntax error |
 | config-errors | Valid TOML that breaks almost every validation rule; checks that all problems are reported at once |
-| resolve-errors | Errors while expanding rules: same-priority duplicates (including three auto rules producing one target), parent/child conflicts, `~` and `.` as targets, os_only nested too deep, and bad auto sources (missing, a file, broken symlink, symlink loop, FIFO) |
+| resolve-errors | Errors while expanding rules: same-priority duplicates (including three auto rules producing one target), parent/child conflicts, `~` and `.` as targets, `auto.<os>` nested too deep, and bad auto sources (missing, a file, broken symlink, symlink loop, FIFO) |
 | plan-errors | Rules resolve, but the disk state stops apply: missing, broken or FIFO sources, a parent that is a file or a symlink, a FIFO at the target, and overlapping source and target |
 | stale | Links left behind by rules removed from dots.toml: one still as dots created it, one replaced by a regular file, one already gone. For `dots status`, the stale hint of `dots apply`, `dots clean` and a broken state file |
 | empty | An empty directory, to try `dots init` |
