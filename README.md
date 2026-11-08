@@ -42,13 +42,12 @@ ignore = ["README.md", ".DS_Store"]
 [[auto.darwin]]
 source = "config/darwin"
 target = "~/.config"
-os_only = true
 ```
 
 * `dots` — Link individual files or directories.
 * `auto` — Link each top-level item of `source` into `target` (`config/tmux` → `~/.config/tmux`).
 * `[os]` — OS-specific rules. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
-* `os_only` — `auto.[os]` only. Excludes the rule's `source` from the common `auto` rules, so the contents of `config/darwin` are linked only on macOS.
+  * If an `auto.[os]` `source` is a top-level item of a common `auto` `source`, that item is automatically excluded from the common rule on every OS, so the contents of `config/darwin` are linked only on macOS.
 * `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
 * `general` — Optional display settings for `dots apply`. Every key may be omitted; an unknown key, a value of the wrong type or an unknown value is an error. `[general]` is not OS-specific.
   * `fold_unchanged` (boolean, default `true`) — Fold unchanged (`✓`) rows into one `… N unchanged` line.
@@ -110,7 +109,6 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    dots apply
    ```
 
-   Rows are grouped by outcome (`✓` unchanged, `+` created, `~` replaced, `!` problems), so what changed is at the bottom. Each created (`+`) or replaced (`~`) link is shown with its source, relative to the repository root. When many rows are unchanged, only the first few are listed and the rest are folded into one line (see `[general]`; shown here with `fold_unchanged_keep = 2`):
    ```
      ✓ ~/.config/fish
      ✓ ~/.config/nvim
@@ -119,27 +117,9 @@ go install github.com/shiroppi/dots/cmd/dots@latest
      ~ ~/.config/tmux  ← config/tmux
 
    2 created, 49 unchanged
-   ```
 
-<!-- ### Stale links -->
-<!---->
-<!-- `dots apply` records the links it creates in a state file (`$XDG_STATE_HOME/dots/state.json`, `~/.local/state/dots/state.json` by default; `~/Library/Application Support/dots/state.json` on macOS; `%LOCALAPPDATA%\dots\state.json` on Windows). When you remove a rule from `dots.toml`, its link stays in place and becomes *stale*. `dots status` lists stale links (and exits with 1), and `dots apply` mentions how many there are, but neither removes them: -->
-<!---->
-<!-- ``` -->
-<!--   ! stale ~/.config/tmux ← config/tmux -->
-<!--     not in dots.toml; created by dots on 2026-10-01 -->
-<!--   ! stale ~/.zshrc -->
-<!--     changed since dots created it; dots will not remove it -->
-<!---->
-<!-- Run "dots clean" to remove stale links. -->
-<!-- ``` -->
-<!---->
-<!-- `dots clean` lists them and asks before removing (`--no-confirm` skips the question, `--dry-run` only shows what would happen). It removes only symbolic links whose link text is still the one dots recorded; a stale path that has since become a regular file, a directory or a different link is left alone and just forgotten, and parent directories are never removed. -->
-<!---->
-<!-- Limitations: -->
-<!---->
-<!-- * Links created by dots v0.1 and removed from `dots.toml` before any v0.2 `dots apply` are not detected, because nothing recorded them. -->
-<!-- * Moving the repository to another path loses the detection of records made before the move. -->
+   # `✓` unchanged, `+` created, `~` replaced, `!` problems
+   ```
 
 > [!IMPORTANT]
 > On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the permission, `SeCreateSymbolicLinkPrivilege`.

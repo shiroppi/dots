@@ -7,7 +7,7 @@
 - 実装言語: Go 1.26 以上（v0.1.0 の 1.24 から上げる。8.4）
 - 設定ファイル: dots.toml
 - 元になった草案: GitHub Issue #1「v1.0までの実装草案」の「v0.2.0 — 初回セットアップと普段使い」
-- 関連Issue: #6（設定から消したルールのリンクが残る）、#9（apply で変更したファイルの source を表示する）、#11（競合の確認でチェックボックスへ移れない）、#4（先行入力で確認プロンプトが止まる）、#10（apply で変化のなかった項目を折りたたむ）
+- 関連Issue: #6（設定から消したルールのリンクが残る）、#9（apply で変更したファイルの source を表示する）、#11（競合の確認でチェックボックスへ移れない）、#4（先行入力で確認プロンプトが止まる）、#10（apply で変化のなかった項目を折りたたむ）、#18（os_only を廃止し、auto.<os> の source を共通 auto から自動で除外する）
 
 ## 1. 目的と範囲
 
@@ -31,6 +31,7 @@ v0.1.0 で、dots.toml に書いたルールどおりにリンクを作り、診
 | #11: 競合の確認でチェックボックスへ移れない | 含める。huh をやめ、bubbletea v2 で確認プロンプトを書いて直す | 8.4 |
 | #4: 先行入力で確認プロンプトが止まる | 確認プロンプトを bubbletea v2 で書くことで一緒に解決する | 8.4 |
 | #10: unchanged なファイルを折りたためる設定がほしい | 含める。dots.toml に `[general]` を加え、既定で折りたたむ | 8.5 |
+| #18: os_only を廃止し、auto.<os> の source を共通 auto から自動で除外する | 含める。v0.1.0 の 5.2.1 を置き換える | 8.7 |
 
 ### 1.2 v0.2.0 の非目標
 
@@ -68,6 +69,7 @@ v0.1.0 の非目標（パッケージマネージャー、環境変数管理、N
 | apply の要約の語 | `already ok` を `unchanged` に変える（apply、apply --dry-run。8.5） | 表示の変更。出力を解析しているスクリプトには影響する |
 | 項目のまとまりの間の空行 | apply と status で、`✓` の行と他の行の間に入れていた空行をなくす（8.1、8.2） | 表示の変更 |
 | apply --dry-run の空の設定 | dots.toml にリンクが1件もないとき、`apply --dry-run` も `apply` と同じく `Nothing to do: dots.toml defines no links.` の1行だけを表示する（8.2） | 表示の変更 |
+| os_only の廃止と auto.<os> の自動除外 | `os_only` を廃止し、`[[auto.<os>]]` の source を共通 `[[auto]]` から自動で除外する（8.7。v0.1.0 の 5.2.1 を置き換える） | v0.1.0 の設定に `os_only` が残っていると未知のキーとして設定エラーになる。移行はその行を消すだけで、配置結果は変わらない |
 | 新コマンド | clean（7章） | - |
 
 ## 3. CLIコマンド
@@ -646,6 +648,50 @@ Repository: ~/dotfiles
 - `source_display` を書かない dots.toml で、apply は `+` と `~` の行にだけ `← source` を表示する。
 - `"off"` では `← source` が出ない。`"verbose"` では全項目に出所つきで出る。
 - `dots status --verbose` に `Overridden rules:` が出ず、`←` が1つの列にそろう。
+
+### 8.7 os_only の廃止と auto.<os> の自動除外（#18）
+
+v0.1.0 の 5.2.1（`os_only`）をこの節で置き換える。
+
+#### 現象
+
+- `[[auto.darwin]]` 自体はもともと darwin でしか動かないため、ルール自体に「OS 専用」という追加の意味は要らない。
+- `os_only = true` が実際に変えるのは共通ルールのほうで、`config/darwin` を共通の走査から全 OS で外す。darwin 側のルールに書いたフラグが、他の OS で動く共通ルールを書き換える形になっていて読みにくい。
+
+#### 仕様
+
+`os_only` を廃止し、`[[auto.<os>]]` ルールの `source` を共通の `[[auto]]` ルールから自動で除外する。
+
+```toml
+[[auto]]
+source = "config"
+target = "~/.config"
+ignore = ["README.md", ".DS_Store"]
+
+[[auto.darwin]]
+source = "config/darwin"
+target = "~/.config"
+```
+
+この例では、darwin では `auto.darwin` だけが `config/darwin` 直下の項目をリンクし、`~/.config/karabiner` を作る（`~/.config/darwin` は作らない）。linux、windows、freebsd、openbsd では `config/darwin` を何も配置しない。
+
+- `os_only` キー自体を廃止する。`[[auto]]` の各要素と `[[auto.<os>]]` ルールで使えるキーは `source`、`target`、`ignore`、および（`[[auto]]` の要素のみ）OS 名とする。`os_only` が残っていたら未知のキーとして設定エラーにする。
+- 除外対象を集めるため、実行中でない OS の `[[auto.<os>]]` も `source` だけは読む。それ以外の用途では、実行中でない OS のルールは従来どおり無視する。
+- 除外は共通の `[[auto]]` ルールにだけ適用する。他の `auto.<os>` ルールや、`dots`・`dots.<os>` のエントリには影響しない。例外として `~/.config/darwin` 自体もリンクしたい（二重の配置）場合は、`[dots]` で `"~/.config/darwin" = "config/darwin"` のように明示する。
+- `[[auto.<os>]]` の `source` は他の `source` と同様にリポジトリルートからの相対パスとして解決し、共通ルールの `source`（C）との関係で次のように扱う。比較は v0.1.0 の 5.4 の配置先と同じ正規化（windows と darwin では大文字・小文字を区別しない）で行い、シンボリックリンクは解決しない。
+  - `source` が C と等しい場合、その共通ルールは何も配置しない。エラーにはしない。
+  - `source` が C の直下の項目（`C/<名前>`）と一致する場合、その項目を `ignore` と同様に共通ルールから全 OS で自動で除外する。
+  - `source` が C の 2 階層以上深い位置（例: C が `config`、OS ルールが `config/os/darwin`）にある場合、その `source` を含む C 直下の項目（`config/os`）がすでに除外されているときだけ何もしない。除外済みとは、別の `auto.<os>` ルール（`source` が C と等しい、または C 直下の項目）が除外している、またはその共通ルールの `ignore` に一致していることをいう。除外されていなければ設定エラーとする。エラーには、OS ルールと共通ルールの位置（例: `auto[1].darwin[0]`、`auto[0]`）を含め、その OS ルールを `config/os` に向けるか、共通ルールで `os` を `ignore` するよう示す（`os_only` への言及はしない）。
+  - C の外にある `auto.<os>` の `source` は何もせず、警告も出さない。
+- `auto.<os>` の `source` 同士が重なることは、上の条件を満たす限り許可する。
+- 共通ルールの `source` が空の場合、または直下の項目がすべて `ignore` や `auto.<os>` で除外された場合は、その共通ルールは何も配置しない（エラーにもしない）。`target` が `"~"` や `"."` の場合も同じである（v0.1.0 の 5.3）。
+
+#### やること
+
+- [x] `internal/config`: `os_only` の解釈を外し、未知のキーとしてエラーにする。
+- [x] `internal/resolve`: 除外対象の収集を「`os_only` のルール」から「すべての `auto.<os>` ルール」に変え、2 階層以上深い位置のエラーメッセージから `os_only` への言及を外す。
+- [x] テストを新しい仕様に合わせて書き換える（`osonly_test.go` ほか）。
+- [x] README の設定例から `os_only` を外し、説明を自動除外の仕様に合わせる。
 
 
 ## 9. 表示と記号

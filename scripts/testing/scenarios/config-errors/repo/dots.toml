@@ -27,8 +27,6 @@ color = true
 [[auto]]
 source = "config"
 target = "~/.config"
-# os_only is allowed only in [[auto.<os>]].
-os_only = true
 # Every invalid ignore form.
 ignore = ["", ".", "..", "sub/dir", "back\\slash", "**", "?.bak", "[ab]", "{a,b}"]
 # Unknown key (typo of "ignore").
@@ -37,7 +35,6 @@ ignores = ["README.md"]
 [[auto.linux]]
 source = "config"
 target = "~/.config"
-os_only = "yes"
 unknown = 1
 
 # [auto.darwin] instead of [[auto.darwin]].

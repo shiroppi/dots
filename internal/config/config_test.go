@@ -131,6 +131,7 @@ func TestParseErrors(t *testing.T) {
 		{"ignore class", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nignore = [\"[ab]\"]\n", []string{"auto[0].", "ignore[0]", "is supported as a wildcard"}},
 		{"os rule missing source", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\n[[auto.linux]]\ntarget = \"~/b\"\n", []string{"auto[0].linux[0]", `missing required key "source"`}},
 		{"os rule unknown key", "[[auto]]\n[[auto.linux]]\nsource = \"a\"\ntarget = \"~/b\"\nfoo = 1\n", []string{"auto[0].linux[0]", `unknown key "foo"`}},
+		{"os rule os_only removed", "[[auto]]\n[[auto.linux]]\nsource = \"a\"\ntarget = \"~/b\"\nos_only = true\n", []string{"auto[0].linux[0]", `unknown key "os_only"`}},
 		{"os rule bad target", "[[auto]]\n[[auto.linux]]\nsource = \"a\"\ntarget = \"C:/x\"\n", []string{"auto[0].linux[0].target", "drive"}},
 		{"os rule bad source", "[[auto]]\n[[auto.linux]]\nsource = \"\"\ntarget = \"~/x\"\n", []string{"auto[0].linux[0].source", "empty"}},
 		{"os key wrong type", "[[auto]]\nsource = \"a\"\ntarget = \"~/a\"\nlinux = 3\n", []string{"auto[0].linux: must be an array of tables"}},

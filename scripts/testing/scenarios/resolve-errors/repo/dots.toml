@@ -46,8 +46,8 @@ target = "~/.config"
 source = "os2"
 target = "~/.config"
 
-# os_only nested two levels below auto[3]'s source: a/linux/deep would still
-# be linked through d/ on every OS.
+# auto.<os> nested two levels below auto[3]'s source: a/linux/deep would still
+# be linked on every OS.
 [[auto]]
 source = "a/linux"
 target = "~/.local/share/a"
@@ -55,7 +55,6 @@ target = "~/.local/share/a"
 [[auto.linux]]
 source = "a/linux/deep/x"
 target = "~/.local/share/x"
-os_only = true
 
 # Auto sources that are missing, a file, or contain unusable items.
 [[auto]]
