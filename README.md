@@ -104,10 +104,9 @@ go install github.com/shiroppi/dots/cmd/dots@latest
    ```
 3. Apply the configuration (creates symlinks):
    ```bash
-   dots apply
-   ```
+   $ dots apply
+   Repository: ~/dotfiles
 
-   ```
      ✓ ~/.config/fish
      ✓ ~/.config/nvim
      … 47 unchanged
