@@ -22,7 +22,7 @@ Although other operating systems supported by [GOOS](https://pkg.go.dev/internal
 ## Configuration
 
 ```toml
-[general]
+[ui]
 fold_unchanged = true
 fold_unchanged_keep = 2
 
@@ -48,7 +48,7 @@ target = "~/.config"
   * `[os]` — OS-specific rules. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
   * `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
 
-* General
+* UI
   * `fold_unchanged` (boolean, default `true`) — Fold unchanged (`✓`) rows into one `… N unchanged` line.
   * `fold_unchanged_keep` (integer >= 0, default `2`) — How many unchanged rows stay visible when folding.
 
