@@ -68,23 +68,10 @@ type General struct {
 	FoldUnchanged bool
 	// FoldUnchangedKeep is how many unchanged rows stay visible when folding.
 	FoldUnchangedKeep int
-	// SourceDisplay is how apply annotates rows with their source: one of
-	// SourceOff, SourceSimple, SourceVerbose.
-	SourceDisplay string
 }
 
-// Key of [general] that selects the source annotation of apply.
-const sourceDisplayKey = "source_display"
-
-// Values of General.SourceDisplay.
-const (
-	SourceOff     = "off"     // no source
-	SourceSimple  = "simple"  // "← source" on created and replaced rows
-	SourceVerbose = "verbose" // "← source  rule" on every row, like status --verbose
-)
-
 // DefaultGeneral is [general] when the table or a key is omitted.
-var DefaultGeneral = General{FoldUnchanged: true, FoldUnchangedKeep: 5, SourceDisplay: SourceSimple}
+var DefaultGeneral = General{FoldUnchanged: true, FoldUnchangedKeep: 2}
 
 // Link is one flat-notation entry ("target" = "source").
 type Link struct {
@@ -296,20 +283,8 @@ func (p *parser) parseGeneral(v interface{}, cfg *Config) {
 				continue
 			}
 			g.FoldUnchangedKeep = int(n)
-		case sourceDisplayKey:
-			s, isStr := val.(string)
-			if !isStr {
-				p.errf("general.%s: must be a string, got %s", k, typeName(val))
-				continue
-			}
-			switch s {
-			case SourceOff, SourceSimple, SourceVerbose:
-				g.SourceDisplay = s
-			default:
-				p.errf("general.%s: unknown value %q (allowed: %q, %q, %q)", k, s, SourceOff, SourceSimple, SourceVerbose)
-			}
 		default:
-			p.errf("general: unknown key %q (allowed: fold_unchanged, fold_unchanged_keep, %s)", k, sourceDisplayKey)
+			p.errf("general: unknown key %q (allowed: fold_unchanged, fold_unchanged_keep)", k)
 		}
 	}
 }

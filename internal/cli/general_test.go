@@ -52,25 +52,25 @@ func writeConfig(t *testing.T, te *testEnv, generalHeader string, targets []stri
 func TestCLIApplyFolding(t *testing.T) {
 	te, _ := setupAppliedEnv(t, 8)
 
-	// 1. apply: shows first 5 ✓ rows and "… 3 unchanged"
+	// 1. apply: shows first 2 ✓ rows and "… 6 unchanged"
 	code := te.run("apply")
 	if code != 0 {
 		t.Errorf("apply want 0, got %d", code)
 	}
 	out := te.out.String()
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 2; i++ {
 		disp := te.app.printer().Display(p("home", fmt.Sprintf(".f%d", i)))
 		if !strings.Contains(out, "✓ "+disp) {
-			t.Errorf("apply should show first 5 rows, missing %s in:\n%s", disp, out)
+			t.Errorf("apply should show first 2 rows, missing %s in:\n%s", disp, out)
 		}
 	}
-	if !strings.Contains(out, "… 3 unchanged") {
-		t.Errorf("apply should show fold line '… 3 unchanged', got:\n%s", out)
+	if !strings.Contains(out, "… 6 unchanged") {
+		t.Errorf("apply should show fold line '… 6 unchanged', got:\n%s", out)
 	}
-	for i := 6; i <= 8; i++ {
+	for i := 3; i <= 8; i++ {
 		disp := te.app.printer().Display(p("home", fmt.Sprintf(".f%d", i)))
 		if strings.Contains(out, "✓ "+disp) {
-			t.Errorf("apply should fold rows 6-8, found %s in:\n%s", disp, out)
+			t.Errorf("apply should fold rows 3-8, found %s in:\n%s", disp, out)
 		}
 	}
 	if !strings.Contains(out, "Everything is up to date.") {
@@ -93,22 +93,22 @@ func TestCLIApplyFolding(t *testing.T) {
 		t.Errorf("apply --verbose should not fold rows, got:\n%s", outVerbose)
 	}
 
-	// 3. apply --dry-run: folds too (shows first 5 ✓ rows and "… 3 unchanged")
+	// 3. apply --dry-run: folds too (shows first 2 ✓ rows and "… 6 unchanged")
 	code = te.run("apply", "--dry-run")
 	if code != 0 {
 		t.Errorf("apply --dry-run want 0, got %d", code)
 	}
 	outDryRun := te.out.String()
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= 2; i++ {
 		disp := te.app.printer().Display(p("home", fmt.Sprintf(".f%d", i)))
 		if !strings.Contains(outDryRun, "✓ "+disp) {
 			t.Errorf("apply --dry-run missing %s in:\n%s", disp, outDryRun)
 		}
 	}
-	if !strings.Contains(outDryRun, "… 3 unchanged") {
-		t.Errorf("apply --dry-run missing fold line '… 3 unchanged', got:\n%s", outDryRun)
+	if !strings.Contains(outDryRun, "… 6 unchanged") {
+		t.Errorf("apply --dry-run missing fold line '… 6 unchanged', got:\n%s", outDryRun)
 	}
-	for i := 6; i <= 8; i++ {
+	for i := 3; i <= 8; i++ {
 		disp := te.app.printer().Display(p("home", fmt.Sprintf(".f%d", i)))
 		if strings.Contains(outDryRun, "✓ "+disp) {
 			t.Errorf("apply --dry-run should fold row %s, found in:\n%s", disp, outDryRun)
@@ -176,80 +176,12 @@ func TestCLIFoldUnchangedKeep(t *testing.T) {
 	}
 }
 
-func TestCLISourceDisplay(t *testing.T) {
-	// source_display = "off": created rows have no "←"
-	t.Run("off", func(t *testing.T) {
-		te := setupEnv(t)
-		if err := dotsfs.WriteFile(te.fsys, p("f_off"), []byte("content"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		toml := "[general]\nsource_display = \"off\"\n\n[dots]\n\"~/.new_off\" = \"f_off\"\n"
-		if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		code := te.run("apply")
-		if code != 0 {
-			t.Errorf("apply want 0, got %d", code)
-		}
-		out := te.out.String()
-		disp := te.app.printer().Display(p("home", ".new_off"))
-		if !strings.Contains(out, "+ "+disp) {
-			t.Errorf("missing created row %s in:\n%s", disp, out)
-		}
-		if strings.Contains(out, "←") {
-			t.Errorf("source_display=off must not have '←', got:\n%s", out)
-		}
-	})
-
-	// source_display = "verbose": rows show the rule (e.g. dots."~/.a")
-	t.Run("verbose", func(t *testing.T) {
-		te := setupEnv(t)
-		if err := dotsfs.WriteFile(te.fsys, p("f_verb"), []byte("content"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		toml := "[general]\nsource_display = \"verbose\"\n\n[dots]\n\"~/.new_verb\" = \"f_verb\"\n"
-		if err := dotsfs.WriteFile(te.fsys, p("dots.toml"), []byte(toml), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		code := te.run("apply")
-		if code != 0 {
-			t.Errorf("apply want 0, got %d", code)
-		}
-		out := te.out.String()
-		disp := te.app.printer().Display(p("home", ".new_verb"))
-		if !strings.Contains(out, "+ "+disp) {
-			t.Errorf("missing created row %s in:\n%s", disp, out)
-		}
-		if !strings.Contains(out, "← f_verb  dots.\"~/.new_verb\"") {
-			t.Errorf("source_display=verbose missing rule in:\n%s", out)
-		}
-
-		// Subsequent apply (unchanged row) should also show the rule in verbose mode
-		code = te.run("apply")
-		if code != 0 {
-			t.Errorf("idempotent apply want 0, got %d", code)
-		}
-		out2 := te.out.String()
-		if !strings.Contains(out2, "✓ "+disp) {
-			t.Errorf("missing unchanged row %s in:\n%s", disp, out2)
-		}
-		if !strings.Contains(out2, "← f_verb  dots.\"~/.new_verb\"") {
-			t.Errorf("source_display=verbose missing rule on unchanged row in:\n%s", out2)
-		}
-	})
-}
-
 func TestCLIInvalidGeneralConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		toml     string
 		wantSubs []string
 	}{
-		{
-			name:     "source_display invalid value",
-			toml:     "[general]\nsource_display = \"full\"\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"general.source_display", "unknown value \"full\""},
-		},
 		{
 			name:     "fold_unchanged_keep negative",
 			toml:     "[general]\nfold_unchanged_keep = -1\n\n[dots]\n\"~/.a\" = \"a\"\n",

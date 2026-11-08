@@ -24,7 +24,7 @@ Although other operating systems supported by [GOOS](https://pkg.go.dev/internal
 ```toml
 [general]
 fold_unchanged = true
-fold_unchanged_keep = 5
+fold_unchanged_keep = 2
 
 [dots]
 "~/.vimrc" = "vimrc"
@@ -50,7 +50,7 @@ target = "~/.config"
 
 * General
   * `fold_unchanged` (boolean, default `true`) — Fold unchanged (`✓`) rows into one `… N unchanged` line.
-  * `fold_unchanged_keep` (integer >= 0, default `5`) — How many unchanged rows stay visible when folding.
+  * `fold_unchanged_keep` (integer >= 0, default `2`) — How many unchanged rows stay visible when folding.
 
 ### Directory structure
 

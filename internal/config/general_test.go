@@ -6,7 +6,7 @@ import (
 )
 
 func TestGeneralDefault(t *testing.T) {
-	if !DefaultGeneral.FoldUnchanged || DefaultGeneral.FoldUnchangedKeep != 5 || DefaultGeneral.SourceDisplay != SourceSimple {
+	if !DefaultGeneral.FoldUnchanged || DefaultGeneral.FoldUnchangedKeep != 2 {
 		t.Fatalf("DefaultGeneral unexpected values: %+v", DefaultGeneral)
 	}
 	sources := []struct {
@@ -40,57 +40,27 @@ func TestGeneralOmittedKeys(t *testing.T) {
 		{
 			name: "fold_unchanged false",
 			src:  "[general]\nfold_unchanged = false\n",
-			want: General{FoldUnchanged: false, FoldUnchangedKeep: 5, SourceDisplay: SourceSimple},
+			want: General{FoldUnchanged: false, FoldUnchangedKeep: 2},
 		},
 		{
 			name: "fold_unchanged true",
 			src:  "[general]\nfold_unchanged = true\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 5, SourceDisplay: SourceSimple},
+			want: General{FoldUnchanged: true, FoldUnchangedKeep: 2},
 		},
 		{
 			name: "fold_unchanged_keep 0",
 			src:  "[general]\nfold_unchanged_keep = 0\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 0, SourceDisplay: SourceSimple},
+			want: General{FoldUnchanged: true, FoldUnchangedKeep: 0},
 		},
 		{
 			name: "fold_unchanged_keep 10",
 			src:  "[general]\nfold_unchanged_keep = 10\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 10, SourceDisplay: SourceSimple},
-		},
-		{
-			name: "source_display off",
-			src:  "[general]\nsource_display = \"off\"\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 5, SourceDisplay: SourceOff},
-		},
-		{
-			name: "source_display simple",
-			src:  "[general]\nsource_display = \"simple\"\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 5, SourceDisplay: SourceSimple},
-		},
-		{
-			name: "source_display verbose",
-			src:  "[general]\nsource_display = \"verbose\"\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 5, SourceDisplay: SourceVerbose},
-		},
-		{
-			name: "omit keep only",
-			src:  "[general]\nfold_unchanged = false\nsource_display = \"verbose\"\n",
-			want: General{FoldUnchanged: false, FoldUnchangedKeep: 5, SourceDisplay: SourceVerbose},
-		},
-		{
-			name: "omit source_display only",
-			src:  "[general]\nfold_unchanged = false\nfold_unchanged_keep = 2\n",
-			want: General{FoldUnchanged: false, FoldUnchangedKeep: 2, SourceDisplay: SourceSimple},
-		},
-		{
-			name: "omit fold_unchanged only",
-			src:  "[general]\nfold_unchanged_keep = 3\nsource_display = \"off\"\n",
-			want: General{FoldUnchanged: true, FoldUnchangedKeep: 3, SourceDisplay: SourceOff},
+			want: General{FoldUnchanged: true, FoldUnchangedKeep: 10},
 		},
 		{
 			name: "all specified",
-			src:  "[general]\nfold_unchanged = false\nfold_unchanged_keep = 0\nsource_display = \"off\"\n",
-			want: General{FoldUnchanged: false, FoldUnchangedKeep: 0, SourceDisplay: SourceOff},
+			src:  "[general]\nfold_unchanged = false\nfold_unchanged_keep = 5\n",
+			want: General{FoldUnchanged: false, FoldUnchangedKeep: 5},
 		},
 	}
 	for _, tc := range tests {
@@ -157,31 +127,6 @@ func TestGeneralValidationErrors(t *testing.T) {
 			src:  "[general]\nfold_unchanged = false\nfold_unchanged_keep = \"none\"\n",
 			want: []string{"general.fold_unchanged_keep", "must be an integer", "a string"},
 		},
-		{
-			name: "source_display invalid value",
-			src:  "[general]\nsource_display = \"full\"\n",
-			want: []string{"general.source_display", "unknown value \"full\"", "allowed:", "\"off\"", "\"simple\"", "\"verbose\""},
-		},
-		{
-			name: "source_display empty string",
-			src:  "[general]\nsource_display = \"\"\n",
-			want: []string{"general.source_display", "unknown value \"\""},
-		},
-		{
-			name: "source_display integer",
-			src:  "[general]\nsource_display = 1\n",
-			want: []string{"general.source_display", "must be a string", "an integer"},
-		},
-		{
-			name: "source_display boolean",
-			src:  "[general]\nsource_display = true\n",
-			want: []string{"general.source_display", "must be a string", "a boolean"},
-		},
-		{
-			name: "source_display array",
-			src:  "[general]\nsource_display = [\"off\"]\n",
-			want: []string{"general.source_display", "must be a string", "an array"},
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -207,12 +152,12 @@ func TestGeneralUnknownKeys(t *testing.T) {
 		{
 			name: "unknown key in general",
 			src:  "[general]\nunknown_key = 1\n",
-			want: []string{"general: unknown key \"unknown_key\"", "allowed: fold_unchanged, fold_unchanged_keep, source_display"},
+			want: []string{"general: unknown key \"unknown_key\"", "allowed: fold_unchanged, fold_unchanged_keep"},
 		},
 		{
 			name: "sub-table general.linux",
 			src:  "[general.linux]\nfold_unchanged = false\n",
-			want: []string{"general: unknown key \"linux\"", "allowed: fold_unchanged, fold_unchanged_keep, source_display"},
+			want: []string{"general: unknown key \"linux\"", "allowed: fold_unchanged, fold_unchanged_keep"},
 		},
 		{
 			name: "general is integer",
