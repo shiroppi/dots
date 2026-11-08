@@ -33,11 +33,11 @@ func setupAppliedEnv(t *testing.T, count int) (*testEnv, []string) {
 	return te, targets
 }
 
-func writeConfig(t *testing.T, te *testEnv, generalHeader string, targets []string) {
+func writeConfig(t *testing.T, te *testEnv, uiHeader string, targets []string) {
 	t.Helper()
 	var lines []string
-	if generalHeader != "" {
-		lines = append(lines, generalHeader)
+	if uiHeader != "" {
+		lines = append(lines, uiHeader)
 	}
 	lines = append(lines, "[dots]")
 	for _, tgt := range targets {
@@ -134,7 +134,7 @@ func TestCLIApplyFolding(t *testing.T) {
 
 func TestCLIFoldUnchangedFalse(t *testing.T) {
 	te, targets := setupAppliedEnv(t, 8)
-	writeConfig(t, te, "[general]\nfold_unchanged = false\n", targets)
+	writeConfig(t, te, "[ui]\nfold_unchanged = false\n", targets)
 
 	code := te.run("apply")
 	if code != 0 {
@@ -154,7 +154,7 @@ func TestCLIFoldUnchangedFalse(t *testing.T) {
 
 func TestCLIFoldUnchangedKeep(t *testing.T) {
 	te, targets := setupAppliedEnv(t, 8)
-	writeConfig(t, te, "[general]\nfold_unchanged_keep = 1\n", targets)
+	writeConfig(t, te, "[ui]\nfold_unchanged_keep = 1\n", targets)
 
 	code := te.run("apply")
 	if code != 0 {
@@ -176,7 +176,7 @@ func TestCLIFoldUnchangedKeep(t *testing.T) {
 	}
 }
 
-func TestCLIInvalidGeneralConfig(t *testing.T) {
+func TestCLIInvalidUIConfig(t *testing.T) {
 	tests := []struct {
 		name     string
 		toml     string
@@ -184,28 +184,33 @@ func TestCLIInvalidGeneralConfig(t *testing.T) {
 	}{
 		{
 			name:     "fold_unchanged_keep negative",
-			toml:     "[general]\nfold_unchanged_keep = -1\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"general.fold_unchanged_keep", "must be 0 or more"},
+			toml:     "[ui]\nfold_unchanged_keep = -1\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui.fold_unchanged_keep", "must be 0 or more"},
 		},
 		{
 			name:     "fold_unchanged wrong type",
-			toml:     "[general]\nfold_unchanged = \"false\"\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"general.fold_unchanged", "must be a boolean"},
+			toml:     "[ui]\nfold_unchanged = \"false\"\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui.fold_unchanged", "must be a boolean"},
 		},
 		{
-			name:     "unknown key in general",
-			toml:     "[general]\nextra = 1\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"general: unknown key \"extra\""},
+			name:     "unknown key in ui",
+			toml:     "[ui]\nextra = 1\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui: unknown key \"extra\""},
 		},
 		{
-			name:     "general sub-table",
-			toml:     "[general.linux]\nfold_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"general: unknown key \"linux\""},
+			name:     "ui sub-table",
+			toml:     "[ui.linux]\nfold_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui: unknown key \"linux\""},
 		},
 		{
-			name:     "general not a table",
-			toml:     "general = 1\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"general: must be a table"},
+			name:     "ui not a table",
+			toml:     "ui = 1\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui: must be a table"},
+		},
+		{
+			name:     "general is rejected as unknown top-level table",
+			toml:     "[general]\nfold_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{`unknown top-level key "general"`},
 		},
 	}
 

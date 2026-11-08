@@ -194,11 +194,11 @@ func (a *App) updateState(pr *ui.Printer, store *statefile.Store, st *statefile.
 }
 
 // load finds, parses and resolves dots.toml starting from Cwd. It also
-// returns the [general] settings.
-func (a *App) load() (*model.Resolution, config.General, error) {
+// returns the [ui] settings.
+func (a *App) load() (*model.Resolution, config.UI, error) {
 	path, err := config.Find(a.FS, a.Env.Cwd)
 	if err != nil {
-		return nil, config.General{}, a.printer().WrapError(err)
+		return nil, config.UI{}, a.printer().WrapError(err)
 	}
 	// From here on the repository root is known, so messages show sources
 	// relative to it.
@@ -206,21 +206,21 @@ func (a *App) load() (*model.Resolution, config.General, error) {
 	pr.Root = filepath.Dir(path)
 	cfg, err := config.Load(a.FS, path)
 	if err != nil {
-		return nil, config.General{}, pr.WrapError(err)
+		return nil, config.UI{}, pr.WrapError(err)
 	}
 	res, err := resolve.Resolve(a.FS, a.Env, path, cfg)
 	if err != nil {
-		return nil, config.General{}, pr.WrapError(err)
+		return nil, config.UI{}, pr.WrapError(err)
 	}
-	return res, cfg.General, nil
+	return res, cfg.UI, nil
 }
 
-// applyPrinter is printerFor with the [general] settings of apply: the
+// applyPrinter is printerFor with the [ui] settings of apply: the
 // folding of unchanged rows unless verbose.
-func (a *App) applyPrinter(res *model.Resolution, g config.General, verbose bool) *ui.Printer {
+func (a *App) applyPrinter(res *model.Resolution, u config.UI, verbose bool) *ui.Printer {
 	pr := a.printerFor(res)
-	pr.Fold = g.FoldUnchanged && !verbose
-	pr.FoldKeep = g.FoldUnchangedKeep
+	pr.Fold = u.FoldUnchanged && !verbose
+	pr.FoldKeep = u.FoldUnchangedKeep
 	return pr
 }
 
@@ -289,7 +289,7 @@ func NewRootCmd(app *App, version string) *cobra.Command {
 }
 
 // InitTemplate is the content written by `dots init`; it defines no links
-// and sets [general] to its default values.
+// and sets [ui] to its default values.
 const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 #
 # [dots] maps a target path to a source path (relative to this file).
@@ -317,9 +317,9 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 #   source = "linux-config"
 #   target = "~/.config"
 
-# [general] tunes the output of dots apply. The values below are the defaults.
+# [ui] tunes the output of dots apply. The values below are the defaults.
 
-[general]
+[ui]
 fold_unchanged = true       # fold unchanged rows into "… N unchanged"
 fold_unchanged_keep = 2     # unchanged rows kept visible when folding
 
@@ -387,12 +387,12 @@ func newApplyCmd(app *App) *cobra.Command {
 		GroupID: "core",
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, general, err := app.load()
+			res, uiCfg, err := app.load()
 			if err != nil {
 				return err
 			}
 			plan := apply.BuildPlan(app.FS, res)
-			pr := app.applyPrinter(res, general, verbose)
+			pr := app.applyPrinter(res, uiCfg, verbose)
 			if len(plan.Items) == 0 {
 				fmt.Fprintln(app.Stdout, "Nothing to do: dots.toml defines no links.")
 				return nil

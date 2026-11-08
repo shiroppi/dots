@@ -58,20 +58,20 @@ type Config struct {
 	Dots   []Link
 	DotsOS map[string][]Link
 	Auto   []AutoGroup
-	// General holds [general] with defaults for omitted keys (spec §8.5).
-	General General
+	// UI holds [ui] with defaults for omitted keys (spec §8.5).
+	UI UI
 }
 
-// General is the [general] table.
-type General struct {
+// UI is the [ui] table.
+type UI struct {
 	// FoldUnchanged folds the unchanged rows of apply (spec §8.5).
 	FoldUnchanged bool
 	// FoldUnchangedKeep is how many unchanged rows stay visible when folding.
 	FoldUnchangedKeep int
 }
 
-// DefaultGeneral is [general] when the table or a key is omitted.
-var DefaultGeneral = General{FoldUnchanged: true, FoldUnchangedKeep: 2}
+// DefaultUI is [ui] when the table or a key is omitted.
+var DefaultUI = UI{FoldUnchanged: true, FoldUnchangedKeep: 2}
 
 // Link is one flat-notation entry ("target" = "source").
 type Link struct {
@@ -147,7 +147,7 @@ func Parse(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("TOML syntax error: %w", err)
 	}
 	p := &parser{}
-	cfg := &Config{DotsOS: map[string][]Link{}, General: DefaultGeneral}
+	cfg := &Config{DotsOS: map[string][]Link{}, UI: DefaultUI}
 
 	for _, k := range sortedKeys(raw) {
 		switch k {
@@ -155,10 +155,10 @@ func Parse(data []byte) (*Config, error) {
 			p.parseDots(raw[k], cfg)
 		case "auto":
 			p.parseAuto(raw[k], cfg)
-		case "general":
-			p.parseGeneral(raw[k], cfg)
+		case "ui":
+			p.parseUI(raw[k], cfg)
 		default:
-			p.errf("unknown top-level key %q (only \"dots\", \"auto\" and \"general\" are allowed)", k)
+			p.errf("unknown top-level key %q (only \"dots\", \"auto\" and \"ui\" are allowed)", k)
 		}
 	}
 	if len(p.errs) > 0 {
@@ -255,36 +255,36 @@ func (p *parser) parseDots(v interface{}, cfg *Config) {
 	}
 }
 
-func (p *parser) parseGeneral(v interface{}, cfg *Config) {
+func (p *parser) parseUI(v interface{}, cfg *Config) {
 	tbl, ok := v.(map[string]interface{})
 	if !ok {
-		p.errf("general: must be a table, got %s", typeName(v))
+		p.errf("ui: must be a table, got %s", typeName(v))
 		return
 	}
-	g := &cfg.General
+	u := &cfg.UI
 	for _, k := range sortedKeys(tbl) {
 		val := tbl[k]
 		switch k {
 		case "fold_unchanged":
 			b, isBool := val.(bool)
 			if !isBool {
-				p.errf("general.%s: must be a boolean, got %s", k, typeName(val))
+				p.errf("ui.%s: must be a boolean, got %s", k, typeName(val))
 				continue
 			}
-			g.FoldUnchanged = b
+			u.FoldUnchanged = b
 		case "fold_unchanged_keep":
 			n, isInt := val.(int64)
 			if !isInt {
-				p.errf("general.%s: must be an integer, got %s", k, typeName(val))
+				p.errf("ui.%s: must be an integer, got %s", k, typeName(val))
 				continue
 			}
 			if n < 0 {
-				p.errf("general.%s: must be 0 or more, got %d", k, n)
+				p.errf("ui.%s: must be 0 or more, got %d", k, n)
 				continue
 			}
-			g.FoldUnchangedKeep = int(n)
+			u.FoldUnchangedKeep = int(n)
 		default:
-			p.errf("general: unknown key %q (allowed: fold_unchanged, fold_unchanged_keep)", k)
+			p.errf("ui: unknown key %q (allowed: fold_unchanged, fold_unchanged_keep)", k)
 		}
 	}
 }
