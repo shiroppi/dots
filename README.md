@@ -23,7 +23,6 @@ Although other operating systems supported by [GOOS](https://pkg.go.dev/internal
 
 ```toml
 [general]
-source_display = "simple"
 fold_unchanged = true
 fold_unchanged_keep = 5
 
@@ -44,15 +43,14 @@ source = "config/darwin"
 target = "~/.config"
 ```
 
-* `dots` — Link individual files or directories.
-* `auto` — Link each top-level item of `source` into `target` (`config/tmux` → `~/.config/tmux`).
-* `[os]` — OS-specific rules. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
-  * If an `auto.[os]` `source` is a top-level item of a common `auto` `source`, that item is automatically excluded from the common rule on every OS, so the contents of `config/darwin` are linked only on macOS.
-* `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
-* `general` — Optional display settings for `dots apply`. Every key may be omitted; an unknown key, a value of the wrong type or an unknown value is an error. `[general]` is not OS-specific.
+* File placement
+  * `auto` — Link each top-level item of `source` into `target` (`config/tmux` → `~/.config/tmux`).
+  * `[os]` — OS-specific rules. (supported value: `windows`, `darwin`(macos), `linux`, `freebsd`, `openbsd`)
+  * `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
+
+* General
   * `fold_unchanged` (boolean, default `true`) — Fold unchanged (`✓`) rows into one `… N unchanged` line.
   * `fold_unchanged_keep` (integer >= 0, default `5`) — How many unchanged rows stay visible when folding.
-  * `source_display` (`"off"` | `"simple"` | `"verbose"`, default `"simple"`) — Which rows show their source (`← source`) in `dots apply` and `dots apply --dry-run`: `"off"` shows none, `"simple"` only the created (`+`) and replaced (`~`) rows, `"verbose"` every row, followed by the rule that produced it (`← zsh/zshrc  auto[0]`).
 
 ### Directory structure
 
