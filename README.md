@@ -1,5 +1,5 @@
 > [!NOTE]
-> dots is being reconstructed now. You can use dots, but it will have kind of changes with configuration such as renaming config file, changing key name of config, and so on.
+> dots is being reconstructed now. You can use dots, but it will have kind of changes with configuration such as renaming config file, changing key name of config, and so on. Refer to [issue #21](https://github.com/shiroppi/dots/issues/21).
 
 <details>
 
