@@ -1,3 +1,8 @@
+> [!NOTE]
+> dots is being reconstructed now. You can use dots, but it will have kind of changes with configuration such as renaming config file, changing key name of config, and so on.
+
+<details>
+
 <div align="center">
     <img src="docs/icon_512x512.webp" alt="dots logo" width="256" height="256">
     <h1>dots</h1>
@@ -107,3 +112,5 @@ go install github.com/shiroppi/dots/cmd/dots@latest
 
 > [!IMPORTANT]
 > On Windows, creating symlinks requires either `Developer Mode` to be enabled or the user who has the `SeCreateSymbolicLinkPrivilege` (usually Administrator).
+
+</details>
