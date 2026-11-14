@@ -23,8 +23,7 @@ Although other operating systems supported by [GOOS](https://pkg.go.dev/internal
 
 ```toml
 [ui]
-fold_unchanged = true
-fold_unchanged_keep = 2
+show_unchanged = 2
 
 [dots]
 "~/.vimrc" = "vimrc"
@@ -49,8 +48,7 @@ target = "~/.config"
   * `ignore` — Top-level names to skip in an `auto` source. `*` is the only wildcard; case-sensitive.
 
 * UI
-  * `fold_unchanged` (boolean, default `true`) — Fold unchanged (`✓`) rows into one `… N unchanged` line.
-  * `fold_unchanged_keep` (integer >= 0, default `2`) — How many unchanged rows stay visible when folding.
+  * `show_unchanged` (integer >= 0 or `"all"`, default `2`) — How many unchanged (`✓`) rows stay visible before folding the rest into one `… N unchanged` line. `"all"` disables folding.
 
 ### Directory structure
 
