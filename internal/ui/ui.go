@@ -25,9 +25,9 @@ type Printer struct {
 	Root  string // repository root (absolute); when set, sources under it are shown relative to it
 	Width int    // terminal width in columns; 0 when unknown (arrows are then always aligned)
 	// Fold folds the unchanged rows of the apply plan and report, keeping
-	// the first FoldKeep of them (spec §8.5).
-	Fold     bool
-	FoldKeep int
+	// the first ShowUnchanged of them (spec §8.5).
+	Fold          bool
+	ShowUnchanged int
 }
 
 type tone int
@@ -363,7 +363,7 @@ func (p *Printer) applyList() *itemList {
 	l := p.newList(SourceSimple)
 	l.grouped = true
 	if p.Fold {
-		l.foldKeep = p.FoldKeep
+		l.showUnchanged = p.ShowUnchanged
 	}
 	return l
 }

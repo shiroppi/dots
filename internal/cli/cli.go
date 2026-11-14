@@ -216,11 +216,11 @@ func (a *App) load() (*model.Resolution, config.UI, error) {
 }
 
 // applyPrinter is printerFor with the [ui] settings of apply: the
-// folding of unchanged rows unless verbose.
+// folding of unchanged rows unless verbose or show_unchanged = "all".
 func (a *App) applyPrinter(res *model.Resolution, u config.UI, verbose bool) *ui.Printer {
 	pr := a.printerFor(res)
-	pr.Fold = u.FoldUnchanged && !verbose
-	pr.FoldKeep = u.FoldUnchangedKeep
+	pr.Fold = u.ShowUnchanged >= 0 && !verbose
+	pr.ShowUnchanged = u.ShowUnchanged
 	return pr
 }
 
@@ -317,11 +317,10 @@ const InitTemplate = `# dots.toml - declarative dotfiles configuration.
 #   source = "linux-config"
 #   target = "~/.config"
 
-# [ui] tunes the output of dots apply. The values below are the defaults.
+# [ui] tunes the output of dots apply. The value below is the default.
 
 [ui]
-fold_unchanged = true       # fold unchanged rows into "… N unchanged"
-fold_unchanged_keep = 2     # unchanged rows kept visible when folding
+show_unchanged = 2          # unchanged rows kept visible ("all" disables folding)
 
 [dots]
 `

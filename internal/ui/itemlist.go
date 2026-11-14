@@ -43,9 +43,10 @@ type itemList struct {
 	grouped bool
 	// mode selects the rows that show their source.
 	mode SourceMode
-	// foldKeep, when 0 or more, folds the ok rows of a grouped list after the
-	// first foldKeep of them (spec §8.5). Negative means no folding.
-	foldKeep int
+	// showUnchanged, when 0 or more, folds the ok rows of a grouped list
+	// after the first showUnchanged of them (spec §8.5). Negative means no
+	// folding.
+	showUnchanged int
 }
 
 type listLine struct {
@@ -59,7 +60,7 @@ type listLine struct {
 }
 
 func (p *Printer) newList(mode SourceMode) *itemList {
-	return &itemList{p: p, mode: mode, foldKeep: -1}
+	return &itemList{p: p, mode: mode, showUnchanged: -1}
 }
 
 // item adds "  <symbol> [word ]<target>", followed by "← source" as mode
@@ -157,22 +158,22 @@ func (l *itemList) sortBlocks() {
 		blocks[len(blocks)-1] = append(blocks[len(blocks)-1], ln)
 	}
 	slices.SortStableFunc(blocks, func(a, b []listLine) int { return a[0].rank - b[0].rank })
-	if l.foldKeep >= 0 {
+	if l.showUnchanged >= 0 {
 		blocks = l.fold(blocks)
 	}
 	l.lines = slices.Concat(blocks...)
 }
 
-// fold replaces the ok blocks after the first foldKeep with one dim
+// fold replaces the ok blocks after the first showUnchanged with one dim
 // "… N unchanged" line (spec §8.5). The blocks are sorted, so the ok ones
 // lead. Folding a single block would not save a line, so U ok blocks are
-// folded only when U > foldKeep+1.
+// folded only when U > showUnchanged+1.
 func (l *itemList) fold(blocks [][]listLine) [][]listLine {
 	u := 0
 	for u < len(blocks) && blocks[u][0].rank == symbolRank(symOK) {
 		u++
 	}
-	k := l.foldKeep
+	k := l.showUnchanged
 	if u <= k+1 {
 		return blocks
 	}

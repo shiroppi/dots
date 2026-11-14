@@ -91,7 +91,7 @@ func TestFoldPlanThresholds(t *testing.T) {
 
 			out := render(func(pr *Printer) {
 				pr.Fold = true
-				pr.FoldKeep = tc.k
+				pr.ShowUnchanged = tc.k
 				pr.Plan(plan)
 			})
 
@@ -167,7 +167,7 @@ func TestFoldReportThresholds(t *testing.T) {
 
 			out := render(func(pr *Printer) {
 				pr.Fold = true
-				pr.FoldKeep = tc.k
+				pr.ShowUnchanged = tc.k
 				pr.Report(rep)
 			})
 
@@ -208,12 +208,12 @@ func TestFoldReportThresholds(t *testing.T) {
 	}
 }
 
-func TestFoldKeepZero(t *testing.T) {
+func TestShowUnchangedZero(t *testing.T) {
 	// K = 0 and U = 1: U <= K+1 (1 <= 1), 1 ✓ row shown, no "…" line.
 	plan1 := &apply.Plan{Items: makeOKPlanItems(1)}
 	outPlan1 := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 0
+		pr.ShowUnchanged = 0
 		pr.Plan(plan1)
 	})
 	if strings.Contains(outPlan1, "…") {
@@ -226,7 +226,7 @@ func TestFoldKeepZero(t *testing.T) {
 	rep1 := &apply.Report{Items: makeOKReportItems(1)}
 	outRep1 := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 0
+		pr.ShowUnchanged = 0
 		pr.Report(rep1)
 	})
 	if strings.Contains(outRep1, "…") {
@@ -241,7 +241,7 @@ func TestFoldKeepZero(t *testing.T) {
 		plan := &apply.Plan{Items: makeOKPlanItems(u)}
 		outPlan := render(func(pr *Printer) {
 			pr.Fold = true
-			pr.FoldKeep = 0
+			pr.ShowUnchanged = 0
 			pr.Plan(plan)
 		})
 		if strings.Contains(outPlan, "✓") {
@@ -255,7 +255,7 @@ func TestFoldKeepZero(t *testing.T) {
 		rep := &apply.Report{Items: makeOKReportItems(u)}
 		outRep := render(func(pr *Printer) {
 			pr.Fold = true
-			pr.FoldKeep = 0
+			pr.ShowUnchanged = 0
 			pr.Report(rep)
 		})
 		if strings.Contains(outRep, "✓") {
@@ -271,7 +271,7 @@ func TestFoldDisabled(t *testing.T) {
 	plan := &apply.Plan{Items: makeOKPlanItems(7)}
 	outPlan := render(func(pr *Printer) {
 		pr.Fold = false
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Plan(plan)
 	})
 	if strings.Contains(outPlan, "…") {
@@ -287,7 +287,7 @@ func TestFoldDisabled(t *testing.T) {
 	rep := &apply.Report{Items: makeOKReportItems(7)}
 	outRep := render(func(pr *Printer) {
 		pr.Fold = false
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Report(rep)
 	})
 	if strings.Contains(outRep, "…") {
@@ -308,7 +308,7 @@ func TestFoldSummaryAllUnchanged(t *testing.T) {
 	}
 	outPlanChange := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Plan(planWithChange)
 	})
 	checkContains(t, outPlanChange, "1 to create, 7 unchanged")
@@ -327,7 +327,7 @@ func TestFoldSummaryAllUnchanged(t *testing.T) {
 	}
 	outRepChange := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Report(repWithChange)
 	})
 	checkContains(t, outRepChange, "1 created, 7 unchanged")
@@ -342,7 +342,7 @@ func TestFoldSummaryAllUnchanged(t *testing.T) {
 	planAllOK := &apply.Plan{Items: makeOKPlanItems(7)}
 	outPlanAllOK := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Plan(planAllOK)
 	})
 	checkContains(t, outPlanAllOK, "  … 5 unchanged", "Everything is up to date.")
@@ -358,7 +358,7 @@ func TestFoldSummaryAllUnchanged(t *testing.T) {
 	repAllOK := &apply.Report{Items: makeOKReportItems(7)}
 	outRepAllOK := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Report(repAllOK)
 	})
 	checkContains(t, outRepAllOK, "  … 5 unchanged", "Everything is up to date.")
@@ -382,12 +382,12 @@ func TestFoldArrowAlignment(t *testing.T) {
 
 	outFolded := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Plan(plan)
 	})
 	outUnfolded := render(func(pr *Printer) {
 		pr.Fold = false
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Plan(plan)
 	})
 
@@ -433,7 +433,7 @@ func TestFoldColor(t *testing.T) {
 	// Without Color: no escape sequences
 	outPlain := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Color = false
 		pr.Plan(plan)
 	})
@@ -445,7 +445,7 @@ func TestFoldColor(t *testing.T) {
 	// With Color: fold line is dim ("\x1b[2m")
 	outColor := render(func(pr *Printer) {
 		pr.Fold = true
-		pr.FoldKeep = 2
+		pr.ShowUnchanged = 2
 		pr.Color = true
 		pr.Plan(plan)
 	})
@@ -466,7 +466,7 @@ func TestFoldNoBlankLine(t *testing.T) {
 	t.Run("Plan folded", func(t *testing.T) {
 		out := render(func(pr *Printer) {
 			pr.Fold = true
-			pr.FoldKeep = 2
+			pr.ShowUnchanged = 2
 			pr.Plan(plan)
 		})
 		checkNoBlankLinesInItems(t, out)
@@ -491,7 +491,7 @@ func TestFoldNoBlankLine(t *testing.T) {
 	t.Run("Report folded", func(t *testing.T) {
 		out := render(func(pr *Printer) {
 			pr.Fold = true
-			pr.FoldKeep = 2
+			pr.ShowUnchanged = 2
 			pr.Report(rep)
 		})
 		checkNoBlankLinesInItems(t, out)

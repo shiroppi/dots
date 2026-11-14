@@ -132,9 +132,9 @@ func TestCLIApplyFolding(t *testing.T) {
 	}
 }
 
-func TestCLIFoldUnchangedFalse(t *testing.T) {
+func TestCLIShowUnchangedAll(t *testing.T) {
 	te, targets := setupAppliedEnv(t, 8)
-	writeConfig(t, te, "[ui]\nfold_unchanged = false\n", targets)
+	writeConfig(t, te, "[ui]\nshow_unchanged = \"all\"\n", targets)
 
 	code := te.run("apply")
 	if code != 0 {
@@ -144,17 +144,17 @@ func TestCLIFoldUnchangedFalse(t *testing.T) {
 	for i := 1; i <= 8; i++ {
 		disp := te.app.printer().Display(p("home", fmt.Sprintf(".f%d", i)))
 		if !strings.Contains(out, "✓ "+disp) {
-			t.Errorf("fold_unchanged=false missing %s in:\n%s", disp, out)
+			t.Errorf("show_unchanged=\"all\" missing %s in:\n%s", disp, out)
 		}
 	}
 	if strings.Contains(out, "…") {
-		t.Errorf("fold_unchanged=false must not fold rows, got:\n%s", out)
+		t.Errorf("show_unchanged=\"all\" must not fold rows, got:\n%s", out)
 	}
 }
 
-func TestCLIFoldUnchangedKeep(t *testing.T) {
+func TestCLIShowUnchangedCount(t *testing.T) {
 	te, targets := setupAppliedEnv(t, 8)
-	writeConfig(t, te, "[ui]\nfold_unchanged_keep = 1\n", targets)
+	writeConfig(t, te, "[ui]\nshow_unchanged = 1\n", targets)
 
 	code := te.run("apply")
 	if code != 0 {
@@ -163,16 +163,33 @@ func TestCLIFoldUnchangedKeep(t *testing.T) {
 	out := te.out.String()
 	disp1 := te.app.printer().Display(p("home", ".f1"))
 	if !strings.Contains(out, "✓ "+disp1) {
-		t.Errorf("fold_unchanged_keep=1 missing row 1 (%s) in:\n%s", disp1, out)
+		t.Errorf("show_unchanged=1 missing row 1 (%s) in:\n%s", disp1, out)
 	}
 	if !strings.Contains(out, "… 7 unchanged") {
-		t.Errorf("fold_unchanged_keep=1 missing '… 7 unchanged', got:\n%s", out)
+		t.Errorf("show_unchanged=1 missing '… 7 unchanged', got:\n%s", out)
 	}
 	for i := 2; i <= 8; i++ {
 		disp := te.app.printer().Display(p("home", fmt.Sprintf(".f%d", i)))
 		if strings.Contains(out, "✓ "+disp) {
-			t.Errorf("fold_unchanged_keep=1 should not show row %s, got:\n%s", disp, out)
+			t.Errorf("show_unchanged=1 should not show row %s, got:\n%s", disp, out)
 		}
+	}
+}
+
+func TestCLIShowUnchangedZero(t *testing.T) {
+	te, targets := setupAppliedEnv(t, 8)
+	writeConfig(t, te, "[ui]\nshow_unchanged = 0\n", targets)
+
+	code := te.run("apply")
+	if code != 0 {
+		t.Errorf("apply want 0, got %d", code)
+	}
+	out := te.out.String()
+	if strings.Contains(out, "✓") {
+		t.Errorf("show_unchanged=0 should show no ✓ rows, got:\n%s", out)
+	}
+	if !strings.Contains(out, "… 8 unchanged") {
+		t.Errorf("show_unchanged=0 missing '… 8 unchanged', got:\n%s", out)
 	}
 }
 
@@ -183,14 +200,29 @@ func TestCLIInvalidUIConfig(t *testing.T) {
 		wantSubs []string
 	}{
 		{
-			name:     "fold_unchanged_keep negative",
-			toml:     "[ui]\nfold_unchanged_keep = -1\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"ui.fold_unchanged_keep", "must be 0 or more"},
+			name:     "show_unchanged negative",
+			toml:     "[ui]\nshow_unchanged = -1\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui.show_unchanged", "must be 0 or more"},
 		},
 		{
-			name:     "fold_unchanged wrong type",
-			toml:     "[ui]\nfold_unchanged = \"false\"\n\n[dots]\n\"~/.a\" = \"a\"\n",
-			wantSubs: []string{"ui.fold_unchanged", "must be a boolean"},
+			name:     "show_unchanged wrong string",
+			toml:     "[ui]\nshow_unchanged = \"false\"\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\""},
+		},
+		{
+			name:     "show_unchanged boolean",
+			toml:     "[ui]\nshow_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\""},
+		},
+		{
+			name:     "old key fold_unchanged is rejected",
+			toml:     "[ui]\nfold_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui: unknown key \"fold_unchanged\"", "allowed: show_unchanged"},
+		},
+		{
+			name:     "old key fold_unchanged_keep is rejected",
+			toml:     "[ui]\nfold_unchanged_keep = 2\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			wantSubs: []string{"ui: unknown key \"fold_unchanged_keep\"", "allowed: show_unchanged"},
 		},
 		{
 			name:     "unknown key in ui",
@@ -199,7 +231,7 @@ func TestCLIInvalidUIConfig(t *testing.T) {
 		},
 		{
 			name:     "ui sub-table",
-			toml:     "[ui.linux]\nfold_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			toml:     "[ui.linux]\nshow_unchanged = \"all\"\n\n[dots]\n\"~/.a\" = \"a\"\n",
 			wantSubs: []string{"ui: unknown key \"linux\""},
 		},
 		{
@@ -209,7 +241,7 @@ func TestCLIInvalidUIConfig(t *testing.T) {
 		},
 		{
 			name:     "general is rejected as unknown top-level table",
-			toml:     "[general]\nfold_unchanged = false\n\n[dots]\n\"~/.a\" = \"a\"\n",
+			toml:     "[general]\nshow_unchanged = 2\n\n[dots]\n\"~/.a\" = \"a\"\n",
 			wantSubs: []string{`unknown top-level key "general"`},
 		},
 	}

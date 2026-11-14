@@ -62,16 +62,19 @@ type Config struct {
 	UI UI
 }
 
+// ShowAllUnchanged is the ShowUnchanged value that disables folding ("all").
+const ShowAllUnchanged = -1
+
 // UI is the [ui] table.
 type UI struct {
-	// FoldUnchanged folds the unchanged rows of apply (spec §8.5).
-	FoldUnchanged bool
-	// FoldUnchangedKeep is how many unchanged rows stay visible when folding.
-	FoldUnchangedKeep int
+	// ShowUnchanged is how many unchanged (✓) rows stay visible in apply
+	// before folding the rest into "… N unchanged" (spec §8.5).
+	// ShowAllUnchanged (-1) means show all rows without folding ("all").
+	ShowUnchanged int
 }
 
 // DefaultUI is [ui] when the table or a key is omitted.
-var DefaultUI = UI{FoldUnchanged: true, FoldUnchangedKeep: 2}
+var DefaultUI = UI{ShowUnchanged: 2}
 
 // Link is one flat-notation entry ("target" = "source").
 type Link struct {
@@ -265,26 +268,25 @@ func (p *parser) parseUI(v interface{}, cfg *Config) {
 	for _, k := range sortedKeys(tbl) {
 		val := tbl[k]
 		switch k {
-		case "fold_unchanged":
-			b, isBool := val.(bool)
-			if !isBool {
-				p.errf("ui.%s: must be a boolean, got %s", k, typeName(val))
-				continue
+		case "show_unchanged":
+			switch v := val.(type) {
+			case int64:
+				if v < 0 {
+					p.errf("ui.%s: must be 0 or more, or \"all\", got %d", k, v)
+					continue
+				}
+				u.ShowUnchanged = int(v)
+			case string:
+				if v != "all" {
+					p.errf("ui.%s: must be a non-negative integer or \"all\", got %q", k, v)
+					continue
+				}
+				u.ShowUnchanged = ShowAllUnchanged
+			default:
+				p.errf("ui.%s: must be a non-negative integer or \"all\", got %s", k, typeName(val))
 			}
-			u.FoldUnchanged = b
-		case "fold_unchanged_keep":
-			n, isInt := val.(int64)
-			if !isInt {
-				p.errf("ui.%s: must be an integer, got %s", k, typeName(val))
-				continue
-			}
-			if n < 0 {
-				p.errf("ui.%s: must be 0 or more, got %d", k, n)
-				continue
-			}
-			u.FoldUnchangedKeep = int(n)
 		default:
-			p.errf("ui: unknown key %q (allowed: fold_unchanged, fold_unchanged_keep)", k)
+			p.errf("ui: unknown key %q (allowed: show_unchanged)", k)
 		}
 	}
 }

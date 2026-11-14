@@ -6,7 +6,7 @@ import (
 )
 
 func TestUIDefault(t *testing.T) {
-	if !DefaultUI.FoldUnchanged || DefaultUI.FoldUnchangedKeep != 2 {
+	if DefaultUI.ShowUnchanged != 2 {
 		t.Fatalf("DefaultUI unexpected values: %+v", DefaultUI)
 	}
 	sources := []struct {
@@ -31,36 +31,31 @@ func TestUIDefault(t *testing.T) {
 	}
 }
 
-func TestUIOmittedKeys(t *testing.T) {
+func TestUIShowUnchangedValues(t *testing.T) {
 	tests := []struct {
 		name string
 		src  string
 		want UI
 	}{
 		{
-			name: "fold_unchanged false",
-			src:  "[ui]\nfold_unchanged = false\n",
-			want: UI{FoldUnchanged: false, FoldUnchangedKeep: 2},
+			name: "show_unchanged all",
+			src:  "[ui]\nshow_unchanged = \"all\"\n",
+			want: UI{ShowUnchanged: ShowAllUnchanged},
 		},
 		{
-			name: "fold_unchanged true",
-			src:  "[ui]\nfold_unchanged = true\n",
-			want: UI{FoldUnchanged: true, FoldUnchangedKeep: 2},
+			name: "show_unchanged 0",
+			src:  "[ui]\nshow_unchanged = 0\n",
+			want: UI{ShowUnchanged: 0},
 		},
 		{
-			name: "fold_unchanged_keep 0",
-			src:  "[ui]\nfold_unchanged_keep = 0\n",
-			want: UI{FoldUnchanged: true, FoldUnchangedKeep: 0},
+			name: "show_unchanged 2",
+			src:  "[ui]\nshow_unchanged = 2\n",
+			want: UI{ShowUnchanged: 2},
 		},
 		{
-			name: "fold_unchanged_keep 10",
-			src:  "[ui]\nfold_unchanged_keep = 10\n",
-			want: UI{FoldUnchanged: true, FoldUnchangedKeep: 10},
-		},
-		{
-			name: "all specified",
-			src:  "[ui]\nfold_unchanged = false\nfold_unchanged_keep = 5\n",
-			want: UI{FoldUnchanged: false, FoldUnchangedKeep: 5},
+			name: "show_unchanged 10",
+			src:  "[ui]\nshow_unchanged = 10\n",
+			want: UI{ShowUnchanged: 10},
 		},
 	}
 	for _, tc := range tests {
@@ -83,49 +78,49 @@ func TestUIValidationErrors(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "fold_unchanged string",
-			src:  "[ui]\nfold_unchanged = \"true\"\n",
-			want: []string{"ui.fold_unchanged", "must be a boolean", "a string"},
+			name: "show_unchanged negative",
+			src:  "[ui]\nshow_unchanged = -1\n",
+			want: []string{"ui.show_unchanged", "must be 0 or more", "-1"},
 		},
 		{
-			name: "fold_unchanged integer",
-			src:  "[ui]\nfold_unchanged = 1\n",
-			want: []string{"ui.fold_unchanged", "must be a boolean", "an integer"},
+			name: "show_unchanged string other than all",
+			src:  "[ui]\nshow_unchanged = \"none\"\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "\"none\""},
 		},
 		{
-			name: "fold_unchanged_keep negative",
-			src:  "[ui]\nfold_unchanged_keep = -1\n",
-			want: []string{"ui.fold_unchanged_keep", "must be 0 or more", "-1"},
+			name: "show_unchanged numeric string",
+			src:  "[ui]\nshow_unchanged = \"5\"\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "\"5\""},
 		},
 		{
-			name: "fold_unchanged_keep float",
-			src:  "[ui]\nfold_unchanged_keep = 1.5\n",
-			want: []string{"ui.fold_unchanged_keep", "must be an integer", "a float"},
+			name: "show_unchanged empty string",
+			src:  "[ui]\nshow_unchanged = \"\"\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "\"\""},
 		},
 		{
-			name: "fold_unchanged_keep string",
-			src:  "[ui]\nfold_unchanged_keep = \"5\"\n",
-			want: []string{"ui.fold_unchanged_keep", "must be an integer", "a string"},
+			name: "show_unchanged boolean true",
+			src:  "[ui]\nshow_unchanged = true\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "a boolean"},
 		},
 		{
-			name: "fold_unchanged_keep boolean",
-			src:  "[ui]\nfold_unchanged_keep = true\n",
-			want: []string{"ui.fold_unchanged_keep", "must be an integer", "a boolean"},
+			name: "show_unchanged boolean false",
+			src:  "[ui]\nshow_unchanged = false\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "a boolean"},
 		},
 		{
-			name: "fold_unchanged false still validates keep negative",
-			src:  "[ui]\nfold_unchanged = false\nfold_unchanged_keep = -5\n",
-			want: []string{"ui.fold_unchanged_keep", "must be 0 or more", "-5"},
+			name: "show_unchanged float",
+			src:  "[ui]\nshow_unchanged = 1.5\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "a float"},
 		},
 		{
-			name: "fold_unchanged false still validates keep float",
-			src:  "[ui]\nfold_unchanged = false\nfold_unchanged_keep = 3.14\n",
-			want: []string{"ui.fold_unchanged_keep", "must be an integer", "a float"},
+			name: "show_unchanged array",
+			src:  "[ui]\nshow_unchanged = [2]\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "an array"},
 		},
 		{
-			name: "fold_unchanged false still validates keep string",
-			src:  "[ui]\nfold_unchanged = false\nfold_unchanged_keep = \"none\"\n",
-			want: []string{"ui.fold_unchanged_keep", "must be an integer", "a string"},
+			name: "show_unchanged table",
+			src:  "[ui.show_unchanged]\nk = 1\n",
+			want: []string{"ui.show_unchanged", "must be a non-negative integer or \"all\"", "a table"},
 		},
 	}
 	for _, tc := range tests {
@@ -152,12 +147,22 @@ func TestUIUnknownKeys(t *testing.T) {
 		{
 			name: "unknown key in ui",
 			src:  "[ui]\nunknown_key = 1\n",
-			want: []string{"ui: unknown key \"unknown_key\"", "allowed: fold_unchanged, fold_unchanged_keep"},
+			want: []string{"ui: unknown key \"unknown_key\"", "allowed: show_unchanged"},
+		},
+		{
+			name: "old key fold_unchanged is rejected",
+			src:  "[ui]\nfold_unchanged = true\n",
+			want: []string{"ui: unknown key \"fold_unchanged\"", "allowed: show_unchanged"},
+		},
+		{
+			name: "old key fold_unchanged_keep is rejected",
+			src:  "[ui]\nfold_unchanged_keep = 2\n",
+			want: []string{"ui: unknown key \"fold_unchanged_keep\"", "allowed: show_unchanged"},
 		},
 		{
 			name: "sub-table ui.linux",
-			src:  "[ui.linux]\nfold_unchanged = false\n",
-			want: []string{"ui: unknown key \"linux\"", "allowed: fold_unchanged, fold_unchanged_keep"},
+			src:  "[ui.linux]\nshow_unchanged = \"all\"\n",
+			want: []string{"ui: unknown key \"linux\"", "allowed: show_unchanged"},
 		},
 		{
 			name: "ui is integer",
